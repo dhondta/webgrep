@@ -13,7 +13,7 @@ __doc__ = """Search for PATTERN in each input URL and its related resources
 PATTERN is, by default, a basic regular expression (BRE).
 Important note: webgrep does not handle recursion (in other words, it does not
                 spider additional web pages).
-Example: webgrep -i 'hello world' http://www.example.com
+Example: webgrep -i example http://www.example.com
 """
 
 # -------------------- IMPORTS SECTION --------------------
@@ -478,7 +478,7 @@ if __name__ == '__main__':
     global logger, session, args
     parser = argparse.ArgumentParser(
         prog=__file__.lstrip('./'), description=__doc__, add_help=False,
-        usage="%(prog)s [OPTION]... PATTERN [URL]...",
+        usage="%s [OPTION]... PATTERN [URL]..." % basename(__file__),
         epilog="Please report bugs on GitHub: {}".format(__repository__),
         formatter_class=argparse.RawTextHelpFormatter)
     # argument groups are willingly the same as in grep

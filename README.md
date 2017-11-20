@@ -43,43 +43,20 @@ Note: images found in the CSS files are also processed.
 
 ## System Requirements
 
-This framework was tested on an Ubuntu 16.04 with Python 2.7 and Python 3.5.
+This script was tested on an Ubuntu 16.04 with Python 2.7 and Python 3.5.
 
-Its Python logic only uses standard built-in modules except `bs4` and particular tool- or preprocessor-related modules. It makes calls to `grep`.
+Its Python logic mostly uses standard built-in modules but also some particular tool- or preprocessor-related modules. It makes calls to `grep`.
 
 
 ## Installation
 
-1. Clone this repository
-
  ```session
- $ git clone https://github.com/dhondta/webgrep.git
- ```
- 
- > **Behind a proxy ?**
- > 
- > Setting: `git config --global http.proxy http://[user]:[pwd]@[host]:[port]`
- > 
- > Unsetting: `git config --global --unset http.proxy`
- > 
- > Getting: `git config --global --get http.proxy`
-
-2. Install Python requirements
-
- ```session
- $ sudo pip install BeautifulSoup4
+ $ sudo pip install webgrep
  ```
 
  > **Behind a proxy ?**
  > 
  > Do not forget to add option `--proxy=http://[user]:[pwd]@[host]:[port]` to your pip command.
- 
-3. [Facultative] Copy the Python script to your `bin` folder
-
- ```session
- $ chmod a+x webgrep.py
- $ sudo cp webgrep.py /usr/bin/webgrep
- ```
 
 
 ## Quick Start
@@ -87,8 +64,8 @@ Its Python logic only uses standard built-in modules except `bs4` and particular
 1. Help
 
  ```session
- $ ./webgrep.py --help
-usage: webgrep.py [OPTION]... PATTERN [URL]...
+ $ webgrep --help
+usage: webgrep [OPTION]... PATTERN [URL]...
 
 Search for PATTERN in each input URL and its related resources
  (images, scripts and style sheets).
