@@ -1,0 +1,11 @@
+Metadata-Version: 1.0
+Name: webgrep
+Version: 1.0
+Summary: Web page Grep-like tool
+Home-page: https://github.com/dhondta/webgrep
+Author: Alexandre D'Hondt
+Author-email: alexandre.dhondt@gmail.com
+License: GPLv3
+Description: Web page Grep-like tool with additional features like JS deobfuscation and easy extensibility
+Keywords: grep, webpage, js-deobfuscator, css-unminifier, exif-metadata, ocr
+Platform: Linux
