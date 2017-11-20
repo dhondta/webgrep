@@ -1,3 +1,7 @@
+[![pypi](https://img.shields.io/pypi/v/webgrep-tool.svg)](https://pypi.python.org/pypi/webgrep-tool/)
+[![license](https://img.shields.io/pypi/l/webgrep-tool.svg)](https://pypi.python.org/pypi/webgrep-tool/)
+
+
 ## Table of Contents
 
    * [Introduction](#introduction)
