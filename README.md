@@ -51,7 +51,7 @@ Its Python logic mostly uses standard built-in modules but also some particular 
 ## Installation
 
  ```session
- $ sudo pip install webgrep
+ $ sudo pip install webgrep-tool
  ```
 
  > **Behind a proxy ?**
