@@ -451,25 +451,26 @@ class Resource(object):
         """
         Call built-in grep command on the downloaded resource then remove it.
         """
-        if not self._error and self.type not in self.grep_exclude:
-            logger.debug("> Grepping {}".format(self.abs_fn))
-            # make the command from input arguments
-            tokens = ['grep', '--color=always']
-            if hasattr(args, "grep_opts"):
-                tokens.extend(args.grep_opts or [])
-            if hasattr(args, "pattern") and args.pattern is not None:
-                tokens.append(args.pattern)
-            tokens.append(self.rel_fn)
-            cmd = ' '.join(tokens)
-            # then execute it
-            logger.debug(">> Command: {}".format(cmd))
-            out = Popen(cmd, stdout=PIPE, stderr=STDOUT, cwd=args.tmp,
-                        shell=True).communicate()[0]
-            # NB: despite the fact that shell=True is not recommended, it is
-            #  used as, otherwise, the command is not properly handled
-            #  regarding patterns with quotes
-            if len(out) > 0:
-                print(out.decode('utf-8'))
+        if not self._allowed() or self._error or self.type in self.grep_exclude:
+            return self
+        logger.debug("> Grepping {}".format(self.abs_fn))
+        # make the command from input arguments
+        tokens = ['grep', '--color=always']
+        if hasattr(args, "grep_opts"):
+            tokens.extend(args.grep_opts or [])
+        if hasattr(args, "pattern") and args.pattern is not None:
+            tokens.append(args.pattern)
+        tokens.append(self.rel_fn)
+        cmd = ' '.join(tokens)
+        # then execute it
+        logger.debug(">> Command: {}".format(cmd))
+        out = Popen(cmd, stdout=PIPE, stderr=STDOUT, cwd=args.tmp, shell=True) \
+              .communicate()[0]
+        # NB: despite the fact that shell=True is not recommended, it is
+        #  used as, otherwise, the command is not properly handled
+        #  regarding patterns with quotes
+        if len(out) > 0:
+            print(out.decode('utf-8'))
         return self
 
     def handle(self):
@@ -482,8 +483,8 @@ class Resource(object):
         - style sheets: search for image references then download them for 
                         normal image handling
         """
-        if self._error:
-            return
+        if not self._allowed() or self._error:
+            return self
         # check for headers if they are to be included
         if args.inc_headers and hasattr(self, "resp_headers"):
             # 'resp_headers' does not exist when --keep-files was used as the

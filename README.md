@@ -6,44 +6,17 @@
 ## Table of Contents
 
    * [Introduction](#introduction)
-   * [Design Principles](#design-principles)
    * [System Requirements](#system-requirements)
    * [Installation](#installation)
    * [Quick Start](#quick-start)
+   * [Design Principles](#design-principles)
+   * [Resource *Handlers*](#resource-handlers)
    * [Issues management](#issues-management)
 
 
 ## Introduction
 
 This self-contained tool relies on the well-known `grep` tool for grepping Web pages. It binds nearly every option of the original tool and also provides additional features like deobfuscating Javascript or appyling OCR on images before grepping downloaded resources.
-
-
-## Design principles:
-
-- Maximum use of Python-builtin modules.
-- For non-standard imports ;
-  - trigger exit if not installed and display the command for installing these
-  - do not trigger exit if not installed, display the command for installing these and continue execution without the related functionality
-- No modularity (principle of self-contained tool) so that it can simply be copied in `/usr/bin` with dependencies other than the non-standard imports.
-
-
-## Resource *Handlers*
-
-**Definitions**:
-- *Resource* (what is being processed):  Web page, images, Javascript, CSS
-- *Handler* (how a resource is processed): CSS unminifying, OCR, deobfuscation, EXIF data retrieval, ...
-
-The handlers are defined in the `# --...-- HANDLERS SECTION --...--` of the code. Currently available handlers :
-1. Images
-  - EXIF: using `exiftool`
-  - Strings: using `strings`
-  - OCR: using `tesseract`
-2. Scripts
-  - Javascript beautifying and deobfuscation: using `jsbeautifier`
-3. Styles
-  - Unminifying: using regular expressions
-
-Note: images found in the CSS files are also processed.
 
 
 ## System Requirements
@@ -74,13 +47,19 @@ usage: webgrep [OPTION]... PATTERN [URL]...
 
 Search for PATTERN in each input URL and its related resources
  (images, scripts and style sheets).
-PATTERN is, by default, a basic regular expression (BRE).
+By default,
+ - resources are NOT downloaded
+ - response HTTP headers are NOT included in grepping ; use '--include-headers'
+ - PATTERN is a basic regular expression (BRE) ; use '-E' for extended (ERE)
 Important note: webgrep does not handle recursion (in other words, it does not
                 spider additional web pages).
-Example: webgrep -i 'hello world' http://www.example.com
+Examples:
+  webgrep example http://www.example.com     # will only grep on HTML code
+  webgrep -r example http://www.example.com  # will only grep on LOCAL images, ...
+  webgrep -R example http://www.example.com  # will only grep on ALL images, ...
 
 Regexp selection and interpretation:
-  -e PATTERN, --regexp PATTERN
+  -e REGEXP, --regexp REGEXP
                         use PATTERN for matching
   -f FILE, --file FILE  obtain PATTERN from FILE
   -E, --extended-regexp
@@ -135,7 +114,10 @@ Context control:
                         print NUM lines of output context
 
 Web options:
-  --external-resources  also download non-same-origin resources
+  -r, --local-resources
+                        also grep local resources (same-origin)
+  -R, --all-resources   also grep all resources (even non-same-origin)
+  --include-headers     also grep HTTP headers
   --cookie COOKIE       use a session cookie in the HTTP headers
   --referer REFERER     provide the referer in the HTTP headers
 
@@ -148,17 +130,41 @@ Please report bugs on GitHub: https://github.com/dhondta/webgrep
 
  ```
  
-2. Example of output
+2. Example
 
  ```session
- $ python2 webgrep.py -i example https://example.com/
-     <title>Example Domain</title>
-     <h1>Example Domain</h1>
-     <p>This domain is established to be used for illustrative examples in documents. You may use this
-     domain in examples without prior coordination or asking for permission.</p>
-     <p><a href="http://www.iana.org/domains/example">More information...</a></p>
-
+ $ ./webgrep -R Welcome https://github.com
+       Welcome home, <br>developers
+ 
  ```
+
+
+## Design principles:
+
+- Maximum use of Python-builtin modules.
+- For non-standard imports ;
+  - trigger exit if not installed and display the command for installing these
+  - do not trigger exit if not installed, display the command for installing these and continue execution without the related functionality
+- No modularity (principle of self-contained tool) so that it can simply be copied in `/usr/bin` with dependencies other than the non-standard imports.
+
+
+## Resource *Handlers*
+
+**Definitions**:
+- *Resource* (what is being processed):  Web page, images, Javascript, CSS
+- *Handler* (how a resource is processed): CSS unminifying, OCR, deobfuscation, EXIF data retrieval, ...
+
+The handlers are defined in the `# --...-- HANDLERS SECTION --...--` of the code. Currently available handlers :
+1. Images
+  - EXIF: using `exiftool`
+  - Strings: using `strings`
+  - OCR: using `tesseract`
+2. Scripts
+  - Javascript beautifying and deobfuscation: using `jsbeautifier`
+3. Styles
+  - Unminifying: using regular expressions
+
+Note: images found in the CSS files are also processed.
 
 
 ## Issues management
