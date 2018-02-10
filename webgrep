@@ -216,7 +216,8 @@ class ArgCollectOption(argparse.Action):
                 args.grep_opts.append("{}".format(values))
             elif len(self.dest) > 1:
                 dest = self.dest.replace('_', '-')
-                args.grep_opts.append("--{}={}".format(dest, values))
+#                args.grep_opts.append("--{}={}".format(dest, values))
+                args.grep_opts.extend(["--" + dest, values])
         delattr(args, self.dest)
 
 
@@ -369,8 +370,9 @@ class Resource(object):
                             isinstance(self.content, bytes) else self.content)
             self.grep().handle()
         else:
-            logger.error("Failed to get {} ({} - {})".format(self.url,
-                             resp.status_code, resp.reason))
+            reason = "({} - {})".format(resp.status_code, resp.reason)
+            (logger.debug if self.type != "page" else logger.error) \
+                ("Failed to get {} {}".format(self.url, reason))
 
     def grep(self):
         """
@@ -378,9 +380,15 @@ class Resource(object):
         """
         if self.type not in self.grep_exclude:
             logger.debug("> Grepping {}".format(self.abs_fn))
-            cmd = ' '.join(['grep', '--color=always']
-                           + (args.grep_opts or []) \
-                           + [args.pattern, self.rel_fn])
+            # make the command from input arguments
+            tokens = ['grep', '--color=always']
+            if hasattr(args, "grep_opts"):
+                tokens.extend(args.grep_opts or [])
+            if hasattr(args, "pattern") and args.pattern is not None:
+                tokens.append(args.pattern)
+            tokens.append(self.rel_fn)
+            cmd = ' '.join(tokens)
+            # then execute it
             logger.debug(">> Command: {}".format(cmd))
             out = Popen(cmd, stdout=PIPE, stderr=STDOUT, cwd=args.tmp,
                         shell=True).communicate()[0]
@@ -484,7 +492,7 @@ if __name__ == '__main__':
     # argument groups are willingly the same as in grep
     regex = parser.add_argument_group("Regexp selection and interpretation")
     regex_pat = regex.add_mutually_exclusive_group()
-    regex_pat.add_argument("-e", "--regexp", dest="pattern", default=None,
+    regex_pat.add_argument("-e", "--regexp", action=ArgCollectOption,
                            help="use PATTERN for matching")
     regex_pat.add_argument("-f", "--file", action=ArgCollectOption,
                            help="obtain PATTERN from FILE")
@@ -600,7 +608,7 @@ if __name__ == '__main__':
                          action=ArgCollectOption,
                          help="print NUM lines of output context")
     regex_pat.add_argument("pattern", metavar="PATTERN", nargs='?',
-                           default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+                           default=None, help=argparse.SUPPRESS)
     parser.add_argument("url", metavar="URL", nargs='+', help=argparse.SUPPRESS)
     # ----- START new arguments -----
     web = parser.add_argument_group("Web options")
@@ -621,9 +629,14 @@ if __name__ == '__main__':
                      help="manually set the HTTPS proxy")
     # ----- END new arguments -----
     args = parser.parse_args()
-    if args.pattern is None:
+    if args.pattern is None and "--file" not in args.grep_opts and \
+                                 "--regexp" not in args.grep_opts:
         parser.error("no pattern provided")
-    args.pattern = "'{}'".format(args.pattern.strip("\'\""))
+    if args.pattern is not None:
+        args.pattern = "\"{}\"".format(args.pattern)
+    elif "--regexp" in args.grep_opts:
+        i = args.grep_opts.index("--regexp")
+        args.grep_opts[i+1] = "\"{}\"".format(args.grep_opts[i+1])
     if not hasattr(args, "headers"):
         args.headers = {}
     # configure logging and get the root logger
