@@ -10,10 +10,16 @@ There is NO WARRANTY, to the extent permitted by law."""
 __repository__ = "https://github.com/dhondta/webgrep"
 __doc__ = """Search for PATTERN in each input URL and its related resources
  (images, scripts and style sheets).
-PATTERN is, by default, a basic regular expression (BRE).
+By default,
+ - resources are NOT downloaded
+ - response HTTP headers are NOT included in grepping ; use '--include-headers'
+ - PATTERN is a basic regular expression (BRE) ; use '-E' for extended (ERE)
 Important note: webgrep does not handle recursion (in other words, it does not
                 spider additional web pages).
-Example: webgrep -i example http://www.example.com
+Examples:
+  webgrep example http://www.example.com     # will only grep on HTML code
+  webgrep -r example http://www.example.com  # will only grep on LOCAL images, ...
+  webgrep -R example http://www.example.com  # will only grep on ALL images, ...
 """
 
 # -------------------- IMPORTS SECTION --------------------
@@ -140,7 +146,7 @@ SCRIPT_PREPROCESSORS = {
     "jsbeautifier": ('module', lambda r: jsbeautifier.beautify(r.content),
                      "Python library required for deobfuscating Javascript ;"
                      "\n consider running 'sudo pip{} install jsbeautifier'"
-                     .format(["", "3"][P3])),
+                     .format(["2", "3"][P3])),
 }
 STYLE_PREPROCESSORS = {
     "unminifier": ('function', css_unminifier, None),
@@ -270,9 +276,13 @@ class Resource(object):
                'DNT': "1",
                'Upgrade-Insecure-Requests': "1"}
 
-    def __init__(self, url, restype="page"):
+    def __init__(self, url, restype="page", resfrom=None):
         self.url = url
-        self.netloc = urlparse(self.url).netloc
+        parsed = urlparse(url)
+        self.base = "{}://{}".format(parsed.scheme, parsed.netloc)
+        self.netloc = parsed.netloc
+        self._main = resfrom is None
+        self._same_origin = resfrom is None or self.base == resfrom
         self.type = restype
         url_path = urlparse(url).path
         fn = basename(url_path) or "index.html"
@@ -290,7 +300,7 @@ class Resource(object):
         del self
         gc.collect()
 
-    def _derive_resources(self, handlers={}):
+    def _derive_resources(self):
         """
         Derive new resources by applying available tools as defined in the
          global constants (see HANDLERS SECTION).
@@ -309,20 +319,19 @@ class Resource(object):
                                 isinstance(content, bytes) else content)
                 res.grep()
 
-    def _is_allowed(self, netloc):
+    def _is_allowed(self):
         """
         Handle only same-origin or also external resources.
         """
-        return netloc is None or not args.same_origin or \
-            (args.same_origin and self.netloc == netloc)
-        # netloc is None when it is about a web page
+        return self._main or args.inc_all or \
+               (args.inc_local and self._same_origin)
 
-    def download(self, netloc=None):
+    def download(self):
         """
         Download the resource then save it to a temporary folder. Afterwards,
          trigger grep and particular handling.
         """
-        if not self._is_allowed(netloc):
+        if not self._is_allowed():
             return
         # useful e.g. if --keep-files was used ; allows to re-grep on different
         #  keywords without re-downloading everything
@@ -347,6 +356,8 @@ class Resource(object):
             else:
                 # proxy already disabled, just throw the exception
                 raise e
+        if args.inc_headers:
+            self.resp_headers = resp.headers
         Resource.pprint_req(req)
         Resource.pprint_resp(resp)
         if resp.status_code == 200:
@@ -369,10 +380,11 @@ class Resource(object):
                     f.write(bytes(self.content, 'utf-8') if P3 and not \
                             isinstance(self.content, bytes) else self.content)
             self.grep().handle()
+        elif resp.status_code == 204:
+            pass
         else:
             reason = "({} - {})".format(resp.status_code, resp.reason)
-            (logger.debug if self.type != "page" else logger.error) \
-                ("Failed to get {} {}".format(self.url, reason))
+            logger.error("Failed to get {} {}".format(self.url, reason))
 
     def grep(self):
         """
@@ -409,7 +421,22 @@ class Resource(object):
         - style sheets: search for image references then download them for 
                         normal image handling
         """
+        # check for headers if they are to be included
+        if args.inc_headers:
+            fn = self.rel_fn + ".headers"
+            with Resource(fn, "page") as res:
+                # 'resp_headers' does not exist when --keep-files was used as
+                #  the resource is not downloaded again
+                if hasattr(self, "resp_headers"):
+                    h = '\n'.join(": ".join(item) for item in \
+                                  self.resp_headers.items())
+                    with open(res.abs_fn, 'wb') as f:
+                        f.write(h)
+                res.grep()
+        # now, handle resource based on its type
         if self.type == "page":
+            if not args.inc_local and not args.inc_all:
+                return
             soup = bs4.BeautifulSoup(self.content, 'html.parser')
             # download images
             raw_img = 0
@@ -432,21 +459,21 @@ class Resource(object):
                         continue
                 # otherwise, handle it as a normal resource
                 else:
-                    url = urljoin(self.url, img['src'])
-                    with Resource(url, "image") as res:
-                        res.download(self.netloc)
+                    url = urljoin(self.base, img['src'])
+                    with Resource(url, "image", self.url) as res:
+                        res.download()
                 del res
                 gc.collect()
             # download scripts
             for script in soup.find_all("script", src=True):
-                url = urljoin(self.url, script.attrs['src'])
-                with Resource(url, "script") as res:
-                    res.download(self.netloc)
+                url = urljoin(self.base, script.attrs['src'])
+                with Resource(url, "script", self.url) as res:
+                    res.download()
             # download styles
             for link in soup.find_all("link", href=True, rel="stylesheet"):
-                url = urljoin(self.url, link.attrs['href'])
-                with Resource(url, "style") as res:
-                    res.download(self.netloc)
+                url = urljoin(self.base, link.attrs['href'])
+                with Resource(url, "style", self.url) as res:
+                    res.download()
         elif self.type == "image":
             # handle each image tool defined in IMAGE_TOOLS constant
             self._derive_resources()
@@ -454,9 +481,9 @@ class Resource(object):
             # search for image URLs in the style sheet
             for img in CSS_IMG_REGEX.findall(self.content):
                 img_url = img.strip(b"\'\"" if P3 else "\'\"").decode()
-                url = urljoin(self.url, img_url)
-                with Resource(url, "image") as res:
-                    res.download(self.netloc)
+                url = urljoin(self.base, img_url)
+                with Resource(url, "image", self.url) as res:
+                    res.download()
 
     @staticmethod
     def pprint_req(request):
@@ -612,9 +639,14 @@ if __name__ == '__main__':
     parser.add_argument("url", metavar="URL", nargs='+', help=argparse.SUPPRESS)
     # ----- START new arguments -----
     web = parser.add_argument_group("Web options")
-    web.add_argument("--external-resources", dest="same_origin",
-                     action="store_false",
-                     help="also download non-same-origin resources")
+    web.add_argument("-r", "--local-resources", dest="inc_local",
+                     action="store_true",
+                     help="also grep local resources (same-origin)")
+    web.add_argument("-R", "--all-resources", dest="inc_all",
+                     action="store_true",
+                     help="also grep all resources (even non-same-origin)")
+    web.add_argument("--include-headers", dest="inc_headers",
+                     action="store_true", help="also grep HTTP headers")
     web.add_argument("--cookie", action=GetHeader,
                      help="use a session cookie in the HTTP headers")
     web.add_argument("--referer", action=GetHeader,
