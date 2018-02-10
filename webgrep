@@ -3,7 +3,7 @@
 
 __author__ = "Alexandre D'Hondt"
 __email__ = "alexandre.dhondt@gmail.com"
-__version__ = "1.5"
+__version__ = "1.6"
 __copyright__ = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law."""
@@ -290,7 +290,7 @@ class Resource(object):
         self._download = True
         self._error = False
         self._raw_data = 0
-        self._main = parent is None
+        self._main = parent is None or parsed.scheme == "data"
         self._same_origin = parent is None or self.base == parent.base or \
                             parsed.scheme == 'data'  # occurs for embedded image
         # check if the resource is an embedded data
@@ -487,12 +487,15 @@ class Resource(object):
         if not self._allowed() or self._error:
             return self
         # check for headers if they are to be included
-        if args.inc_headers and hasattr(self, "resp_headers"):
-            # 'resp_headers' does not exist when --keep-files was used as the
-            #  resource is not downloaded again
-            h = '\n'.join(": ".join(item) for item in self.resp_headers.items())
-            raw = "data:other/headers;none,{}".format(h)
-            with Resource(raw, self) as res:
+        if args.inc_headers:
+            with Resource("data:other/headers;none,...", self) as res:
+                if not hasattr(res, "content"):  # not in cache
+                    # 'resp_headers' does not exist when --keep-files was used
+                    #  as the resource is not downloaded again
+                    if hasattr(self, "resp_headers"):  # download performed
+                        with open(res.abs_fn, 'w') as f:
+                            f.write(b('\n'.join(": ".join(item) for item in \
+                                      self.resp_headers.items())))
                 res.grep()
         # then, derive new resources by applying available tools as defined in
         #  theglobal constants (see HANDLERS SECTION)
