@@ -3,7 +3,7 @@
 
 __author__ = "Alexandre D'Hondt"
 __email__ = "alexandre.dhondt@gmail.com"
-__version__ = "1.3"
+__version__ = "1.5"
 __copyright__ = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law."""
@@ -95,6 +95,7 @@ CACHE_FILE = "cache.json"
 # - value: tuple of the form (type, handler, message if not exists)
 #    NB: the handler always takes a Resource object in argument
 # Handlers are automatically set as attributes in 'args'
+b = lambda c: bytes(c, 'utf-8') if P3 and not isinstance(c, bytes) else c
 get_cmd = lambda t: lambda r: Popen([t, r.rel_fn], stdout=PIPE,
                               stderr=DEVNULL, cwd=args.tmp).communicate()[0]
 
@@ -313,7 +314,8 @@ class Resource(object):
             self.abs_fn = "{}_{}".format(self.parent.abs_fn, fn)
             if len(data.strip('.')) > 0:
                 with open(self.abs_fn, 'wb') as f:
-                    f.write(data if enc == "none" else base64.b64decode(data))
+                    content = data if enc == "none" else base64.b64decode(data)
+                    f.write(b(content))
             self.parent._raw_data += 1
         # otherwise, compute resource paths
         else:
@@ -422,7 +424,7 @@ class Resource(object):
             if self.type == "image":
                 with open(self.abs_fn, 'wb') as f:
                     for chunk in resp:
-                        f.write(chunk)
+                        f.write(b(chunk))
                 self.content = ''
             # other types of resources are handled with preprocessors
             else:
@@ -434,8 +436,7 @@ class Resource(object):
                         logger.debug("> Preprocessing with {}".format(tool))
                         self.content = handler(self)
                 with open(self.abs_fn, 'wb') as f:
-                    f.write(bytes(self.content, 'utf-8') if P3 and not \
-                        isinstance(self.content, bytes) else self.content)
+                    f.write(b(self.content))
             self._cache()
         elif resp.status_code == 204:  # No Content
             self._error = True
@@ -504,11 +505,8 @@ class Resource(object):
                     res.type = "derived"
                     if not hasattr(res, "content"):  # not in cache
                         logger.debug("> Deriving {}".format(res.abs_fn))
-                        content = str(handler(res))
-                        res.content = bytes(content, 'utf-8') if P3 and not \
-                                      isinstance(content, bytes) else content
                         with open(res.abs_fn, 'w') as f:
-                            f.write(res.content)
+                            f.write(b(str(handler(res))))
                     res.grep()
         # now, handle resource for some particular types
         if self.type == "page":
