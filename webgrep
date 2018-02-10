@@ -26,6 +26,7 @@ Examples:
 import argparse
 import base64
 import gc
+import json
 import logging
 import os
 import re
@@ -70,16 +71,15 @@ logging.getLogger("requests").setLevel(logging.CRITICAL)
 
 # -------------------- CONSTANTS SECTION --------------------
 CSS_IMG_REGEX = re.compile(b'url\(([^)]+)\)' if P3 else r'url\(([^)]+)\)')
-CSS_INDENT = 2
-CSS_MINIFIED_THRESHOLD = 256
 DATE_FORMAT = '%H:%M:%S'
 DEVNULL = open(os.devnull, 'w')
-IMG_NAME = 'raw-image-{:>03}.{}'
+DATA_NAME = '{}-{:>03}.{}'
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(message)s'
 PROXIES = getproxies() or {k.split('_')[0].lower(): os.environ[k] for k in \
     ['HTTP_PROXY', 'HTTPS_PROXY', 'FTP_PROXY'] if k in os.environ.keys()}
 RESOURCE_TYPES = ['image', 'script', 'style']
 TEMP_DIR = '/tmp/webgrep'
+CACHE_FILE = "cache.json"
 
 
 # -------------------- HANDLERS SECTION ---------------------
@@ -98,17 +98,17 @@ TEMP_DIR = '/tmp/webgrep'
 get_cmd = lambda t: lambda r: Popen([t, r.rel_fn], stdout=PIPE,
                               stderr=DEVNULL, cwd=args.tmp).communicate()[0]
 
-def css_unminifier(res):
+def css_unminifier(res, indent=2, maxlen=256):
     """
     Minimalistic CSS unminifying function.
     """
     if res.type != "style":
         return
     # CSS is considered minified if any line is longer than a given length
-    if any([len(l) > CSS_MINIFIED_THRESHOLD for l in res.content.split('\n')]):
+    if any([len(l) > maxlen for l in res.content.split('\n')]):
         res.content = re.sub("\*\/", "*/\n\r", res.content)
-        res.content = re.sub("\{", " {\n\r" + " " * CSS_INDENT, res.content)
-        res.content = re.sub(";", ";\n\r" + " " * CSS_INDENT, res.content)
+        res.content = re.sub("\{", " {\n\r" + " " * indent, res.content)
+        res.content = re.sub(";", ";\n\r" + " " * indent, res.content)
         res.content = re.sub("\}", ";\n\r}\n\r", res.content)
     return res.content
 
@@ -164,6 +164,11 @@ def __exit_handler(signal=None, frame=None, code=0):
     """
     if 'args' in globals():
         if args.keep:
+            if args.cache:
+                logger.debug("Saving cache at {}".format(args.cache_file))
+                with open(args.cache_file, 'w') as f:
+                    json.dump(args.cache, f)
+            args.cache
             logger.info("Temporary files are available at {}".format(args.tmp))
         else:
             logger.debug("Removing temporary folder {}".format(args.tmp))
@@ -222,7 +227,6 @@ class ArgCollectOption(argparse.Action):
                 args.grep_opts.append("{}".format(values))
             elif len(self.dest) > 1:
                 dest = self.dest.replace('_', '-')
-#                args.grep_opts.append("--{}={}".format(dest, values))
                 args.grep_opts.extend(["--" + dest, values])
         delattr(args, self.dest)
 
@@ -276,73 +280,121 @@ class Resource(object):
                'DNT': "1",
                'Upgrade-Insecure-Requests': "1"}
 
-    def __init__(self, url, restype="page", resfrom=None):
+    def __init__(self, url, parent=None):
         self.url = url
+        self.parent = parent
         parsed = urlparse(url)
         self.base = "{}://{}".format(parsed.scheme, parsed.netloc)
         self.netloc = parsed.netloc
-        self._main = resfrom is None
-        self._same_origin = resfrom is None or self.base == resfrom
-        self.type = restype
-        url_path = urlparse(url).path
-        fn = basename(url_path) or "index.html"
-        fp = dirname(url_path).strip('/')
-        self.rel_fn = join(self.netloc, fp, fn)
-        self.abs_fn = join(args.tmp, self.rel_fn)
+        self._download = True
+        self._error = False
+        self._raw_data = 0
+        self._main = parent is None
+        self._same_origin = parent is None or self.base == parent.base or \
+                            parsed.scheme == 'data'  # occurs for embedded image
+        # check if the resource is an embedded data
+        if parsed.scheme == "data":
+            self._download = False
+            # first, decompose the path (data:[parsed.path])
+            #  form: [category]/[type];[encoding],[data]
+            #  e.g.: image/png;base64,...
+            rtype, data = parsed.path.split(";", 1)
+            self.type, ext = rtype.split('/', 1)
+            enc, data = data.split(",", 1)
+            try:
+                if enc.strip() not in ["none", "base64"]:
+                    raise Exception("Bad image encoding")
+            except Exception as e:
+                logger.warn("{} (from {})".format(str(e), self.parent.rel_fn))
+                self._error = True
+                return
+            fn = DATA_NAME.format(self.type, self.parent._raw_data, ext)
+            self.rel_fn = "{}_{}".format(self.parent.rel_fn, fn)
+            self.abs_fn = "{}_{}".format(self.parent.abs_fn, fn)
+            if len(data.strip('.')) > 0:
+                with open(self.abs_fn, 'wb') as f:
+                    f.write(data if enc == "none" else base64.b64decode(data))
+            self.parent._raw_data += 1
+        # otherwise, compute resource paths
+        else:
+            url_path = parsed.path
+            fn = basename(url_path) or "index.html"
+            fp = dirname(url_path).strip('/')
+            self.rel_fn = join(self.netloc, fp, fn)
+            self.abs_fn = join(args.tmp, self.rel_fn)
         abs_fp = dirname(self.abs_fn)
         if not exists(abs_fp):
             os.makedirs(abs_fp)
 
     def __enter__(self):
-        return self
+        return self._load()
 
     def __exit__(self, *unused):
+        self._cache()
         del self
         gc.collect()
 
-    def _derive_resources(self):
-        """
-        Derive new resources by applying available tools as defined in the
-         global constants (see HANDLERS SECTION).
-        """
-        attr = "{}_tools".format(self.type)
-        if not hasattr(args, attr):
-            return
-        for tool, handler in getattr(args, attr):
-            fn = "{}-{}.txt".format(self.rel_fn, tool)
-            with Resource(fn, "derived") as res:
-                logger.debug("> Deriving {}".format(res.abs_fn))
-                if not exists(res.abs_fn):
-                    with open(res.abs_fn, 'wb') as f:
-                        content = handler(self)
-                        f.write(bytes(content, 'utf-8') if P3 and not \
-                                isinstance(content, bytes) else content)
-                res.grep()
-
-    def _is_allowed(self):
+    def _allowed(self):
         """
         Handle only same-origin or also external resources.
         """
         return self._main or args.inc_all or \
                (args.inc_local and self._same_origin)
 
+    def _cache(self):
+        """
+        Resource caching for use with '--keep-files'.
+        """
+        if args.cache is not None and self.rel_fn not in args.cache.keys():
+            logger.debug("> Registering '{}' to cache".format(self.rel_fn))
+            args.cache[self.rel_fn] = self.type
+
+    def _load(self):
+        """
+        Resource loading for use with '--keep-files', allowing to re-grep on
+         different keywords without re-downloading everything.
+        """
+        if exists(self.abs_fn) and args.cache is not None and \
+            self.rel_fn in args.cache.keys():
+            with open(self.abs_fn, 'rb') as f:
+                self.content = f.read()
+            self.type = args.cache[self.rel_fn]
+            logger.debug("> Loading '{}' from cache".format(self.rel_fn))
+            return self
+        else:
+            return self.download()
+
+    def _update_type(self):
+        """
+        Update resource type based on HTTP response content type.
+        """
+        try:
+            ct = self.response.headers['Content-Type'].split(';')[0]
+        except:
+            return
+        # only consider the following MIME types
+        if ct.startswith("image"):
+            self.type = "image"
+        elif ct == "text/css":
+            self.type = "css"
+        elif ct == "application/javascript":
+            self.type = "script"
+        elif ct == "text/html":
+            self.type = "page"
+        else:
+            self.type = "other"
+
     def download(self):
         """
         Download the resource then save it to a temporary folder. Afterwards,
          trigger grep and particular handling.
         """
-        if not self._is_allowed():
-            return
-        # useful e.g. if --keep-files was used ; allows to re-grep on different
-        #  keywords without re-downloading everything
-        if exists(self.abs_fn):
-            with open(self.abs_fn, 'rb') as f:
-                self.content = f.read()
-            self.grep().handle()
-            return
+        if not self._download or not self._allowed():
+            return self
         logger.debug("> Downloading {}".format(self.url))
         self.headers.update(args.headers)
-        req = requests.Request('GET', self.url, headers=self.headers).prepare()
+        req = requests.Request('GET', self.url, headers=self.headers) \
+                      .prepare()
         try:
             resp = session.send(req, proxies=PROXIES if args.proxy else {},
                                 verify=False, stream=True)
@@ -351,17 +403,22 @@ class Resource(object):
                 # try next requests disabling the proxy
                 logger.debug("Disabling proxy settings")
                 globals()['PROXIES'] = {}
-                resp = session.send(req, proxies=PROXIES if args.proxy else {},
-                                    verify=False, stream=True)        
+                resp = session.send(req, proxies=PROXIES if args.proxy \
+                                    else {}, verify=False, stream=True)        
             else:
                 # proxy already disabled, just throw the exception
                 raise e
+        # attach HTTP headers if they are to be grepped
         if args.inc_headers:
             self.resp_headers = resp.headers
+        # print debug information if necessary
         Resource.pprint_req(req)
         Resource.pprint_resp(resp)
+        # adjust resource type if necessary
+        self.response = resp
+        self._update_type()
         if resp.status_code == 200:
-            # images are handled separately in chunks, no preprocessor applied
+            # images handled separately in chunks, no preprocessor applied
             if self.type == "image":
                 with open(self.abs_fn, 'wb') as f:
                     for chunk in resp:
@@ -378,19 +435,23 @@ class Resource(object):
                         self.content = handler(self)
                 with open(self.abs_fn, 'wb') as f:
                     f.write(bytes(self.content, 'utf-8') if P3 and not \
-                            isinstance(self.content, bytes) else self.content)
-            self.grep().handle()
-        elif resp.status_code == 204:
-            pass
+                        isinstance(self.content, bytes) else self.content)
+            self._cache()
+        elif resp.status_code == 204:  # No Content
+            self._error = True
+            return self
         else:
             reason = "({} - {})".format(resp.status_code, resp.reason)
             logger.error("Failed to get {} {}".format(self.url, reason))
+            self._error = True
+            return self
+        return self
 
     def grep(self):
         """
         Call built-in grep command on the downloaded resource then remove it.
         """
-        if self.type not in self.grep_exclude:
+        if not self._error and self.type not in self.grep_exclude:
             logger.debug("> Grepping {}".format(self.abs_fn))
             # make the command from input arguments
             tokens = ['grep', '--color=always']
@@ -421,69 +482,60 @@ class Resource(object):
         - style sheets: search for image references then download them for 
                         normal image handling
         """
+        if self._error:
+            return
         # check for headers if they are to be included
-        if args.inc_headers:
-            fn = self.rel_fn + ".headers"
-            with Resource(fn, "page") as res:
-                # 'resp_headers' does not exist when --keep-files was used as
-                #  the resource is not downloaded again
-                if hasattr(self, "resp_headers"):
-                    h = '\n'.join(": ".join(item) for item in \
-                                  self.resp_headers.items())
-                    with open(res.abs_fn, 'wb') as f:
-                        f.write(h)
+        if args.inc_headers and hasattr(self, "resp_headers"):
+            # 'resp_headers' does not exist when --keep-files was used as the
+            #  resource is not downloaded again
+            h = '\n'.join(": ".join(item) for item in self.resp_headers.items())
+            raw = "data:other/headers;none,{}".format(h)
+            with Resource(raw, self) as res:
                 res.grep()
-        # now, handle resource based on its type
+        # then, derive new resources by applying available tools as defined in
+        #  theglobal constants (see HANDLERS SECTION)
+        attr = "{}_tools".format(self.type)
+        if hasattr(args, attr):
+            # create a new resource for each time a tool is executed
+            for tool, handler in getattr(args, attr):
+                raw = "data:{}/txt;none,...".format(tool)
+                with Resource(raw, self) as res:
+                    res.type = "derived"
+                    if not hasattr(res, "content"):  # not in cache
+                        logger.debug("> Deriving {}".format(res.abs_fn))
+                        content = str(handler(res))
+                        res.content = bytes(content, 'utf-8') if P3 and not \
+                                      isinstance(content, bytes) else content
+                        with open(res.abs_fn, 'w') as f:
+                            f.write(res.content)
+                    res.grep()
+        # now, handle resource for some particular types
         if self.type == "page":
             if not args.inc_local and not args.inc_all:
                 return
             soup = bs4.BeautifulSoup(self.content, 'html.parser')
             # download images
-            raw_img = 0
             for img in soup.find_all("img", src=True):
-                # handle raw base64-encoded images
-                if img['src'].startswith("data:image"):
-                    try:
-                        imgt, data = img['src'].split(";")
-                        enc, data = data.split(",")
-                        if enc != "base64":
-                            raise Exception("Bad image encoding")
-                        fn = IMG_NAME.format(raw_img, imgt.split('/')[1])
-                        with Resource(fn, "image") as res:
-                            with open(res.abs_fn, 'wb') as f:
-                                f.write(base64.b64decode(data))
-                            res.grep().handle()
-                        raw_img += 1
-                    except Exception as e:
-                        logger.exception(str(e))
-                        continue
-                # otherwise, handle it as a normal resource
-                else:
-                    url = urljoin(self.base, img['src'])
-                    with Resource(url, "image", self.url) as res:
-                        res.download()
-                del res
-                gc.collect()
+                url = urljoin(self.base, img['src'])
+                with Resource(url, self) as res:
+                    res.grep().handle()
             # download scripts
             for script in soup.find_all("script", src=True):
                 url = urljoin(self.base, script.attrs['src'])
-                with Resource(url, "script", self.url) as res:
-                    res.download()
+                with Resource(url, self) as res:
+                    res.grep().handle()
             # download styles
             for link in soup.find_all("link", href=True, rel="stylesheet"):
                 url = urljoin(self.base, link.attrs['href'])
-                with Resource(url, "style", self.url) as res:
-                    res.download()
-        elif self.type == "image":
-            # handle each image tool defined in IMAGE_TOOLS constant
-            self._derive_resources()
+                with Resource(url, self) as res:
+                    res.grep().handle()
         elif self.type == "style":
             # search for image URLs in the style sheet
             for img in CSS_IMG_REGEX.findall(self.content):
                 img_url = img.strip(b"\'\"" if P3 else "\'\"").decode()
                 url = urljoin(self.base, img_url)
-                with Resource(url, "image", self.url) as res:
-                    res.download()
+                with Resource(url, self) as res:
+                    res.grep().handle()
 
     @staticmethod
     def pprint_req(request):
@@ -661,8 +713,21 @@ if __name__ == '__main__':
                      help="manually set the HTTPS proxy")
     # ----- END new arguments -----
     args = parser.parse_args()
-    if args.pattern is None and "--file" not in args.grep_opts and \
-                                 "--regexp" not in args.grep_opts:
+    args.cache = None
+    if not args.keep:
+        try:
+            shutil.rmtree(args.tmp)
+        except OSError:
+            pass
+    else:
+        try:
+            args.cache_file = join(args.tmp, CACHE_FILE)
+            with open(args.cache_file) as f:
+                args.cache = json.load(f)
+        except Exception:
+            args.cache = {}
+    if args.pattern is None and (args.grep_opts is None or \
+        "--file" not in args.grep_opts and "--regexp" not in args.grep_opts):
         parser.error("no pattern provided")
     if args.pattern is not None:
         args.pattern = "\"{}\"".format(args.pattern)
@@ -691,6 +756,8 @@ if __name__ == '__main__':
     try:
         session = requests.Session()
         logger.debug("Creating temporary folder {}".format(args.tmp))
+        logger.debug("Cache {}".format(["enabled", "disabled"] \
+                                       [args.cache is None]))
         if not exists(args.tmp):
              os.makedirs(args.tmp)
         done = []
@@ -700,7 +767,7 @@ if __name__ == '__main__':
             logger.debug("Downloading page {} and its associated resources"
                          .format(url))
             with Resource(url) as page:
-                page.download()
+                page.grep().handle()
             done.append(url)
     except Exception as e:
         logger.exception("Unexpected error: {}".format(str(e)))
