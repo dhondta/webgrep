@@ -119,8 +119,10 @@ def steghide(res):
     Steghide handler for applying steganography on images (only trying an empty
      passphrase).
     """
+    if res.type != "image":
+        return
     tmp_file = "/tmp/steghide-extracted-text"
-    cmd = 'steghide extract -sf {} -p "" -f -xf {}'.format(res.rel_fn, tmp_file)
+    cmd = 'steghide extract -sf {} -p "" -f -xf {}'.format(res.abs_fn, tmp_file)
     p = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
     _, output = p.communicate()
     if tmp_file in output:
@@ -514,7 +516,7 @@ class Resource(object):
                     # 'resp_headers' does not exist when --keep-files was used
                     #  as the resource is not downloaded again
                     if hasattr(self, "resp_headers"):  # download performed
-                        with open(res.abs_fn, 'w') as f:
+                        with open(res.abs_fn, 'wb') as f:
                             f.write(b('\n'.join(": ".join(item) for item in \
                                       self.resp_headers.items())))
                 res.grep()
@@ -529,8 +531,8 @@ class Resource(object):
                     res.type = "derived"
                     if not hasattr(res, "content"):  # not in cache
                         logger.debug("> Deriving {}".format(res.abs_fn))
-                        with open(res.abs_fn, 'w') as f:
-                            f.write(b(str(handler(res))))
+                        with open(res.abs_fn, 'wb') as f:
+                            f.write(b(str(handler(self))))
                     res.grep()
         # now, handle resource for some particular types
         if self.type == "page":
