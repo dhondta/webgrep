@@ -3,7 +3,7 @@
 
 __author__ = "Alexandre D'Hondt"
 __email__ = "alexandre.dhondt@gmail.com"
-__version__ = "1.6"
+__version__ = "1.7"
 __copyright__ = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law."""
@@ -114,6 +114,24 @@ def css_unminifier(res, indent=2, maxlen=256):
     return res.content
 
 
+def steghide(res):
+    """
+    Steghide handler for applying steganography on images (only trying an empty
+     passphrase).
+    """
+    tmp_file = "/tmp/steghide-extracted-text"
+    cmd = 'steghide extract -sf {} -p "" -f -xf {}'.format(res.rel_fn, tmp_file)
+    p = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+    _, output = p.communicate()
+    if tmp_file in output:
+        with open(tmp_file, 'rb') as f:
+            content = f.read()
+        os.remove(tmp_file)
+        return content
+    else:
+        return b("")
+
+
 def tesseract(res):
     """
     Tesseract handler for applying OCR on images.
@@ -126,10 +144,10 @@ def tesseract(res):
         result = Popen(cmd, stdout=PIPE, stderr=DEVNULL, cwd=args.tmp) \
                      .communicate()[0].strip()
         if len(result) > 0:
-            for line in result.split(['\n', b'\n'][P3]):
+            for line in result.split(b('\n')):
                 if line not in output:
                     output.append(line)
-    return ['\n', b'\n'][P3].join(output)
+    return b('\n').join(output)
 
 
 IMAGE_TOOLS = {
@@ -139,6 +157,9 @@ IMAGE_TOOLS = {
     "strings": ('binary', get_cmd("strings"),
                 "Binary required for getting strings from downloaded files ;"
                 "\n consider running 'sudo apt-get install strings'"),
+    "steghide": ('binary', steghide,
+                 "Binary required for applying steganography on images ;"
+                 "\n consider running 'sudo apt-get install steghide'"),
     "tesseract": ('binary', tesseract,
                   "Binary required for trying OCR on images ;"
                   "\n consider running 'sudo apt-get install tesseract-ocr'"),
@@ -498,7 +519,7 @@ class Resource(object):
                                       self.resp_headers.items())))
                 res.grep()
         # then, derive new resources by applying available tools as defined in
-        #  theglobal constants (see HANDLERS SECTION)
+        #  the global constants (see HANDLERS SECTION above)
         attr = "{}_tools".format(self.type)
         if hasattr(args, attr):
             # create a new resource for each time a tool is executed
