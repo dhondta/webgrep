@@ -3,7 +3,7 @@
 
 __author__ = "Alexandre D'Hondt"
 __email__ = "alexandre.dhondt@gmail.com"
-__version__ = "1.9"
+__version__ = "1.10"
 __copyright__ = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law."""
@@ -34,7 +34,7 @@ import requests
 import shutil
 import signal
 import sys
-from os.path import basename, dirname, exists, join
+from os.path import basename, dirname, exists, join, splitext
 from subprocess import call, Popen, PIPE, STDOUT
 P3 = sys.version_info >= (3,0)
 # Python2/3 specific imports
@@ -70,7 +70,7 @@ logging.getLogger("requests").setLevel(logging.CRITICAL)
 
 
 # -------------------- CONSTANTS SECTION --------------------
-CSS_IMG_REGEX = re.compile(b'url\(([^)]+)\)' if P3 else r'url\(([^)]+)\)')
+CSS_URL_REGEX = re.compile(b'url\(([^)]+)\)' if P3 else r'url\(([^)]+)\)')
 DATE_FORMAT = '%H:%M:%S'
 DEVNULL = open(os.devnull, 'w')
 DATA_NAME = '{}-{:>03}.{}'
@@ -108,10 +108,10 @@ def css_unminifier(res, indent=2, maxlen=256):
         return
     # CSS is considered minified if any line is longer than a given length
     if any([len(l) > maxlen for l in res.content.split('\n')]):
-        res.content = re.sub("\*\/", "*/\n\r", res.content)
-        res.content = re.sub("\{", " {\n\r" + " " * indent, res.content)
-        res.content = re.sub(";", ";\n\r" + " " * indent, res.content)
-        res.content = re.sub("\}", ";\n\r}\n\r", res.content)
+        res.content = re.sub("\*\/", "*/\r\n", res.content)
+        res.content = re.sub("\{", " {\r\n" + " " * indent, res.content)
+        res.content = re.sub(";", ";\r\n" + " " * indent, res.content)
+        res.content = re.sub("\}", ";\r\n}\r\n", res.content)
     return res.content
 
 
@@ -308,6 +308,7 @@ class Resource(object):
     def __init__(self, url, parent=None):
         self.url = url
         self.parent = parent
+        self.path = dirname(url) + "/"
         parsed = urlparse(url)
         self.base = "{}://{}".format(parsed.scheme, parsed.netloc)
         self.netloc = parsed.netloc
@@ -394,21 +395,28 @@ class Resource(object):
         """
         Update resource type based on HTTP response content type.
         """
+        if self._error:
+            self.type = "failure"
+            return
         try:
             ct = self.response.headers['Content-Type'].split(';')[0]
         except:
+            self.type = "failure"
             return
+        _, ext = splitext(self.url)
         # only consider the following MIME types
         if ct.startswith("image"):
             self.type = "image"
         elif ct == "text/css":
             self.type = "style"
-        elif ct == "application/javascript":
+        elif ct == "application/javascript" or \
+            (ct in ["application/octet-stream", "text/plain"] and ext == ".js"):
             self.type = "script"
         elif ct == "text/html":
             self.type = "page"
         else:
             self.type = "other"
+        logger.debug("> Resource type set to '{}'".format(self.type))
 
     def download(self):
         """
@@ -442,6 +450,7 @@ class Resource(object):
         Resource.pprint_resp(resp)
         # adjust resource type if necessary
         self.response = resp
+        self._error = resp.status_code != 200
         self._update_type()
         if resp.status_code == 200:
             # images handled separately in chunks, no preprocessor applied
@@ -463,13 +472,10 @@ class Resource(object):
                     f.write(b(self.content))
             self._cache()
         elif resp.status_code == 204:  # No Content
-            self._error = True
-            return self
+            pass
         else:
             reason = "({} - {})".format(resp.status_code, resp.reason)
             logger.error("Failed to get {} {}".format(self.url, reason))
-            self._error = True
-            return self
         return self
 
     def grep(self):
@@ -542,24 +548,26 @@ class Resource(object):
             soup = bs4.BeautifulSoup(self.content, 'html.parser')
             # download images
             for img in soup.find_all("img", src=True):
-                url = urljoin(self.base, img['src'])
+                url = urljoin(self.path, img['src'])
                 with Resource(url, self) as res:
                     res.grep().handle()
             # download scripts
             for script in soup.find_all("script", src=True):
-                url = urljoin(self.base, script.attrs['src'])
+                url = urljoin(self.path, script.attrs['src'])
                 with Resource(url, self) as res:
                     res.grep().handle()
             # download styles
             for link in soup.find_all("link", href=True, rel="stylesheet"):
-                url = urljoin(self.base, link.attrs['href'])
+                url = urljoin(self.path, link.attrs['href'])
                 with Resource(url, self) as res:
                     res.grep().handle()
         elif self.type == "style":
             # search for image URLs in the style sheet
-            for img in CSS_IMG_REGEX.findall(self.content):
-                img_url = img.strip(b"\'\"" if P3 else "\'\"").decode()
-                url = urljoin(self.base, img_url)
+            for url in CSS_URL_REGEX.findall(self.content):
+                url = url.strip(b("\'\"")).decode()
+                if url.startswith("#"):  # exclude anchor tags
+                    continue
+                url = urljoin(self.path, url)
                 with Resource(url, self) as res:
                     res.grep().handle()
 
