@@ -3,7 +3,7 @@
 
 __author__ = "Alexandre D'Hondt"
 __email__ = "alexandre.dhondt@gmail.com"
-__version__ = "1.7"
+__version__ = "1.8"
 __copyright__ = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law."""
@@ -95,7 +95,8 @@ CACHE_FILE = "cache.json"
 # - value: tuple of the form (type, handler, message if not exists)
 #    NB: the handler always takes a Resource object in argument
 # Handlers are automatically set as attributes in 'args'
-b = lambda c: bytes(c, 'utf-8') if P3 and not isinstance(c, bytes) else c
+b = lambda c: bytes(c, 'utf-8') if P3 and not isinstance(c, bytes) else \
+              c.encode('utf-8') if isinstance(c, unicode) else c
 get_cmd = lambda t: lambda r: Popen([t, r.rel_fn], stdout=PIPE,
                               stderr=DEVNULL, cwd=args.tmp).communicate()[0]
 
