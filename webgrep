@@ -3,7 +3,7 @@
 
 __author__ = "Alexandre D'Hondt"
 __email__ = "alexandre.dhondt@gmail.com"
-__version__ = "1.8"
+__version__ = "1.9"
 __copyright__ = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law."""
@@ -402,7 +402,7 @@ class Resource(object):
         if ct.startswith("image"):
             self.type = "image"
         elif ct == "text/css":
-            self.type = "css"
+            self.type = "style"
         elif ct == "application/javascript":
             self.type = "script"
         elif ct == "text/html":
