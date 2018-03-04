@@ -159,6 +159,7 @@ Please report bugs on GitHub: https://github.com/dhondta/webgrep
 The handlers are defined in the `# --...-- HANDLERS SECTION --...--` of the code. Currently available handlers :
 1. Images
   - EXIF: using `exiftool`
+  - Steganography: using `steghide` (with a blank password)
   - Strings: using `strings`
   - OCR: using `tesseract`
 2. Scripts
