@@ -77,7 +77,6 @@ DATA_NAME = '{}-{:>03}.{}'
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(message)s'
 PROXIES = getproxies() or {k.split('_')[0].lower(): os.environ[k] for k in \
     ['HTTP_PROXY', 'HTTPS_PROXY', 'FTP_PROXY'] if k in os.environ.keys()}
-RESOURCE_TYPES = ['image', 'script', 'style']
 TEMP_DIR = '/tmp/webgrep'
 CACHE_FILE = "cache.json"
 
@@ -115,6 +114,34 @@ def css_unminifier(res, indent=2, maxlen=256):
     return res.content
 
 
+def inline_items(tag, rtype=None, attrs=None):
+    """
+    Decorator for extracting inline items from a Web page.
+    """
+    if not rtype:
+        rtype = tag
+    if not attrs:
+        attrs = {}
+    def _inline_items(page):
+        """
+        Inline item extraction function.
+        """
+        for item in page.soup.find_all(tag, **attrs):
+            inline = "data:inline/{};none,...".format(rtype)
+            with Resource(inline, page) as res:
+                res.type = rtype
+                if not hasattr(res, "content"):  # not in cache
+                    logger.debug("> Extracting {}".format(res.abs_fn))
+                    res.content = b(item.text)
+                    res.preprocess()
+                    with open(res.abs_fn, 'wb') as f:
+                        f.write(res.content)
+                item.decompose()
+                res.grep().handle()
+        return b(str(page.soup))
+    return _inline_items
+
+
 def steghide(res):
     """
     Steghide handler for applying steganography on images (only trying an empty
@@ -126,7 +153,7 @@ def steghide(res):
     cmd = 'steghide extract -sf {} -p "" -f -xf {}'.format(res.abs_fn, tmp_file)
     p = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
     _, output = p.communicate()
-    if tmp_file in output:
+    if b(tmp_file) in output:
         with open(tmp_file, 'rb') as f:
             content = f.read()
         os.remove(tmp_file)
@@ -153,6 +180,7 @@ def tesseract(res):
     return b('\n').join(output)
 
 
+RESOURCE_TYPES = ['page', 'image', 'script', 'style']
 IMAGE_TOOLS = {
     "exiftool": ('binary', get_cmd("exiftool"),
                  "Binary required for getting image EXIF info ;\n"
@@ -166,6 +194,11 @@ IMAGE_TOOLS = {
     "tesseract": ('binary', tesseract,
                   "Binary required for trying OCR on images ;"
                   "\n consider running 'sudo apt-get install tesseract-ocr'"),
+}
+PAGE_PREPROCESSORS = {
+    "inline-script": ('function', inline_items("script", attrs={'src': False}),
+                      None),
+    "inline-style": ('function', inline_items("style"), None),
 }
 SCRIPT_PREPROCESSORS = {
     "jsbeautifier": ('module', lambda r: jsbeautifier.beautify(r.content),
@@ -401,7 +434,7 @@ class Resource(object):
         try:
             ct = self.response.headers['Content-Type'].split(';')[0]
         except:
-            self.type = "failure"
+            self.type = "undefined"
             return
         _, ext = splitext(self.url)
         # only consider the following MIME types
@@ -410,7 +443,8 @@ class Resource(object):
         elif ct == "text/css":
             self.type = "style"
         elif ct == "application/javascript" or \
-            (ct in ["application/octet-stream", "text/plain"] and ext == ".js"):
+            (ct in ["application/octet-stream", "text/plain", "text/html"] \
+             and ext == ".js"):
             self.type = "script"
         elif ct == "text/html":
             self.type = "page"
@@ -463,11 +497,9 @@ class Resource(object):
             else:
                 self.content = resp.text.encode(resp.encoding) if \
                     resp.encoding is not None else resp.text
-                attr = '{}_preprocessors'.format(self.type)
-                if hasattr(args, attr):
-                    for tool, handler in getattr(args, attr):
-                        logger.debug("> Preprocessing with {}".format(tool))
-                        self.content = handler(self)
+                if self.type == "page":
+                    self.soup = bs4.BeautifulSoup(self.content, 'html.parser')
+                self.preprocess()
                 with open(self.abs_fn, 'wb') as f:
                     f.write(b(self.content))
             self._cache()
@@ -545,19 +577,18 @@ class Resource(object):
         if self.type == "page":
             if not args.inc_local and not args.inc_all:
                 return
-            soup = bs4.BeautifulSoup(self.content, 'html.parser')
             # download images
-            for img in soup.find_all("img", src=True):
+            for img in self.soup.find_all("img", src=True):
                 url = urljoin(self.path, img['src'])
                 with Resource(url, self) as res:
                     res.grep().handle()
             # download scripts
-            for script in soup.find_all("script", src=True):
+            for script in self.soup.find_all("script", src=True):
                 url = urljoin(self.path, script.attrs['src'])
                 with Resource(url, self) as res:
                     res.grep().handle()
             # download styles
-            for link in soup.find_all("link", href=True, rel="stylesheet"):
+            for link in self.soup.find_all("link", href=True, rel="stylesheet"):
                 url = urljoin(self.path, link.attrs['href'])
                 with Resource(url, self) as res:
                     res.grep().handle()
@@ -570,6 +601,16 @@ class Resource(object):
                 url = urljoin(self.path, url)
                 with Resource(url, self) as res:
                     res.grep().handle()
+
+    def preprocess(self):
+        """
+        Preprocess the resource according to its type.
+        """
+        attr = '{}_preprocessors'.format(self.type)
+        if hasattr(args, attr):
+            for tool, handler in getattr(args, attr):
+                logger.debug("> Preprocessing with {}".format(tool))
+                self.content = handler(self)
 
     @staticmethod
     def pprint_req(request):
