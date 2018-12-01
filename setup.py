@@ -5,7 +5,7 @@ from setuptools import setup
 
 setup(
   name = "webgrep-tool",
-  version = "1.12",
+  version = "1.13",
   license = "GPLv3",
   description = "Web page Grep-like tool with additional features like JS deobfuscation and easy extensibility",
   author = "Alexandre D\'Hondt",
