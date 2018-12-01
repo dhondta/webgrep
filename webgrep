@@ -441,21 +441,21 @@ class Resource(object):
             self.type = "failure"
             return
         try:
-            ct = self.response.headers['Content-Type'].split(';')[0]
+            ct = self.response.headers['Content-Type'].split(';')[0].split(',')
         except:
             self.type = "undefined"
             return
         _, ext = splitext(self.url)
         # only consider the following MIME types
-        if ct.startswith("image"):
+        if any(c.startswith("image") for c in ct):
             self.type = "image"
-        elif ct == "text/css":
+        elif "text/css" in ct:
             self.type = "style"
-        elif ct == "application/javascript" or \
-            (ct in ["application/octet-stream", "text/plain", "text/html"] \
-             and ext == ".js"):
+        elif "application/javascript" in ct or \
+            (any(c in ["application/octet-stream", "text/plain", "text/html"] \
+             for c in ct) and ext == ".js"):
             self.type = "script"
-        elif ct == "text/html":
+        elif "text/html" in ct:
             self.type = "page"
         else:
             self.type = "other"
@@ -580,7 +580,7 @@ class Resource(object):
                     if not hasattr(res, "content"):  # not in cache
                         logger.debug("> Deriving {}".format(res.abs_fn))
                         with open(res.abs_fn, 'wb') as f:
-                            f.write(b(str(handler(self))))
+                            f.write(b(handler(self)))
                     res.grep()
         # now, handle resource for some particular types
         if self.type == "page":
