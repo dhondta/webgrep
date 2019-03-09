@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
+import code
 
 __author__ = "Alexandre D'Hondt"
 __email__ = "alexandre.dhondt@gmail.com"
@@ -255,7 +256,7 @@ def __installed(item, itype, message=None):
             return True
         except OSError:
             if message is not None:
-                logger.warn(message)
+                logger.warning(message)
             return False
     elif itype == 'module':
         try:
@@ -263,13 +264,13 @@ def __installed(item, itype, message=None):
             return True
         except ImportError:
             if message is not None:
-                logger.warn(message)
+                logger.warning(message)
             return False
     elif itype == 'function':
         # no check required ; this relates to a locally declared function
         return True
     else:
-        logger.warn("Unknown item type ({})".format(itype))
+        logger.warning("Unknown item type ({})".format(itype))
 
 
 # --------------------- CLASSES SECTION ---------------------
@@ -341,6 +342,7 @@ class Resource(object):
                'Upgrade-Insecure-Requests': "1"}
 
     def __init__(self, url, parent=None):
+        if not re.match('https?:\/\/(www\.)?.+', url): raise Exception('Invalid URL')
         self.url = url
         self.parent = parent
         self.path = dirname(url) + "/"
@@ -373,7 +375,7 @@ class Resource(object):
                 if enc.strip() not in ["none", "base64"]:
                     raise Exception("Bad image encoding")
             except Exception as e:
-                logger.warn("{} (from {})".format(str(e), self.parent.rel_fn))
+                logger.warning("{} (from {})".format(str(e), self.parent.rel_fn))
                 self._error = True
                 return
             fn = DATA_NAME.format(self.type, self.parent._raw_data, ext)
@@ -423,6 +425,7 @@ class Resource(object):
         Resource loading for use with '--keep-files', allowing to re-grep on
          different keywords without re-downloading everything.
         """
+
         if exists(self.abs_fn) and args.cache is not None and \
             self.rel_fn in args.cache.keys():
             with open(self.abs_fn, 'rb') as f:
@@ -589,18 +592,24 @@ class Resource(object):
             # download images
             for img in self.soup.find_all("img", src=True):
                 url = urljoin(self.path, img['src'])
-                with Resource(url, self) as res:
-                    res.grep().handle()
+                try:
+                    with Resource(url, self) as res:
+                        res.grep().handle()
+                except Exception: pass
             # download scripts
             for script in self.soup.find_all("script", src=True):
                 url = urljoin(self.path, script.attrs['src'])
-                with Resource(url, self) as res:
-                    res.grep().handle()
+                try:
+                    with Resource(url, self) as res:
+                        res.grep().handle()
+                except Exception: pass 
             # download styles
             for link in self.soup.find_all("link", href=True, rel="stylesheet"):
                 url = urljoin(self.path, link.attrs['href'])
-                with Resource(url, self) as res:
-                    res.grep().handle()
+                try:
+                    with Resource(url, self) as res:
+                        res.grep().handle()
+                except Exception: pass
         elif self.type == "style":
             # search for image URLs in the style sheet
             for url in CSS_URL_REGEX.findall(self.content):
@@ -608,8 +617,10 @@ class Resource(object):
                 if url.startswith("#"):  # exclude anchor tags
                     continue
                 url = urljoin(self.path, url)
-                with Resource(url, self) as res:
-                    res.grep().handle()
+                try:
+                    with Resource(url, self) as res:
+                        res.grep().handle()
+                except Exception: pass
 
     def preprocess(self):
         """
@@ -851,8 +862,11 @@ if __name__ == '__main__':
                 continue
             logger.debug("Downloading page {} and its associated resources"
                          .format(url))
-            with Resource(url) as page:
-                page.grep().handle()
+            try:
+                with Resource(url) as page:
+                    page.grep().handle()
+            except Exception as e:
+                logger.exception(e)
             done.append(url)
     except Exception as e:
         logger.exception("Unexpected error: {}".format(str(e)))
