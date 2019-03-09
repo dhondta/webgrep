@@ -45,20 +45,6 @@ if P3:
 else:
     from urllib import getproxies, unquote
     from urlparse import urljoin, urlparse
-# BeautifulSoup
-try:
-    import bs4
-except ImportError:
-    print("BeautifulSoup is not installed !\nPlease run 'sudo pip install"
-          " beautifulsoup4' before continuing.")
-    sys.exit(1)
-# colorize logging
-try:
-    import coloredlogs
-    colored_logs_present = True
-except ImportError:
-    print("(Install 'coloredlogs' for colored logging)")
-    colored_logs_present = False
 # disable annoying requests warnings
 try:
     from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -184,20 +170,6 @@ def tesseract(res):
 
 
 RESOURCE_TYPES = ['page', 'image', 'script', 'style']
-IMAGE_TOOLS = {
-    "exiftool": ('binary', get_cmd("exiftool"),
-                 "Binary required for getting image EXIF info ;\n"
-                 " consider running 'sudo apt-get install exiftool'"),
-    "strings": ('binary', get_cmd("strings"),
-                "Binary required for getting strings from downloaded files ;"
-                "\n consider running 'sudo apt-get install strings'"),
-    "steghide": ('binary', steghide,
-                 "Binary required for applying steganography on images ;"
-                 "\n consider running 'sudo apt-get install steghide'"),
-    "tesseract": ('binary', tesseract,
-                  "Binary required for trying OCR on images ;"
-                  "\n consider running 'sudo apt-get install tesseract-ocr'"),
-}
 PAGE_PREPROCESSORS = {
     "inline-script": ('function', inline_items("script", attrs={'src': False}),
                       None),
@@ -207,7 +179,7 @@ SCRIPT_PREPROCESSORS = {
     "jsbeautifier": ('module',
                      lambda r: b(jsbeautifier.beautify(s(r.content))),
                      "Python library required for deobfuscating Javascript ;"
-                     "\n consider running 'sudo pip install jsbeautifier'"),
+                     "\n consider running 'pip install jsbeautifier'"),
 }
 STYLE_PREPROCESSORS = {
     "unminifier": ('function', css_unminifier, None),
@@ -519,7 +491,8 @@ class Resource(object):
             pass
         else:
             reason = "({} - {})".format(resp.status_code, resp.reason)
-            logger.error("Failed to get {} {}".format(self.url, reason))
+            if args.verbose >= logging.ERROR: 
+                logger.error("Failed to get {} {}".format(self.url, reason))
         return self
 
     def grep(self):
@@ -809,6 +782,37 @@ if __name__ == '__main__':
                      help="manually set the HTTPS proxy")
     # ----- END new arguments -----
     args = parser.parse_args()
+    if args.verbose:
+        IMAGE_TOOLS = {
+            "exiftool": ('binary', get_cmd("exiftool"),
+                         "Binary required for getting image EXIF info ;\n"
+                         " consider running 'sudo apt-get install exiftool'"),
+            "strings": ('binary', get_cmd("strings"),
+                        "Binary required for getting strings from downloaded files ;"
+                        "\n consider running 'sudo apt-get install strings'"),
+            "steghide": ('binary', steghide,
+                         "Binary required for applying steganography on images ;"
+                         "\n consider running 'sudo apt-get install steghide'"),
+            "tesseract": ('binary', tesseract,
+                          "Binary required for trying OCR on images ;"
+                          "\n consider running 'sudo apt-get install tesseract-ocr'"),
+        }
+    # BeautifulSoup
+    try:
+        import bs4
+    except ImportError:
+        if args.verbose:
+            print("BeautifulSoup is not installed !\nPlease run 'pip install"
+              " beautifulsoup4' before continuing.")
+        sys.exit(1)
+    # colorize logging
+    try:
+        import coloredlogs
+        colored_logs_present = True
+    except ImportError:
+        if args.verbose:
+            print("(Install 'coloredlogs' for colored logging)")
+        colored_logs_present = False
     args.cache = None
     if not args.keep:
         try:
