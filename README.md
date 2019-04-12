@@ -2,6 +2,7 @@
 ![Platform](https://img.shields.io/badge/platform-linux-yellow.svg)
 [![Read The Docs](https://readthedocs.org/projects/webgrep/badge/?version=latest)](http://webgrep.readthedocs.io/en/latest/?badge=latest)
 [![Known Vulnerabilities](https://snyk.io/test/github/dhondta/webgrep/badge.svg?targetFile=requirements.txt)](https://snyk.io/test/github/dhondta/webgrep?targetFile=requirements.txt)
+[![Requirements Status](https://requires.io/github/dhondta/webgrep/requirements.svg?branch=master)](https://requires.io/github/dhondta/webgrep/requirements/?branch=master)
 [![License](https://img.shields.io/pypi/l/webgrep-tool.svg)](https://pypi.python.org/pypi/webgrep-tool/)
 
 
