@@ -1,29 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
-
-__author__    = "Alexandre D'Hondt"
-__email__     = "alexandre.dhondt@gmail.com"
-__copyright__ = "© 2017-2019 A. D'Hondt"
-__version__   = "1.13"
-__license__   = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
-This is free software: you are free to change and redistribute it.
-There is NO WARRANTY, to the extent permitted by law."""
-__repository__ = "https://github.com/dhondta/webgrep"
-__doc__        = """Search for PATTERN in each input URL and its related resources
- (images, scripts and style sheets).
-By default,
- - resources are NOT downloaded
- - response HTTP headers are NOT included in grepping ; use '--include-headers'
- - PATTERN is a basic regular expression (BRE) ; use '-E' for extended (ERE)
-Important note: webgrep does not handle recursion (in other words, it does not
-                spider additional web pages).
-Examples:
-  webgrep example http://www.example.com     # will only grep on HTML code
-  webgrep -r example http://www.example.com  # will only grep on LOCAL images, ...
-  webgrep -R example http://www.example.com  # will only grep on ALL images, ...
-"""
-
-# -------------------- IMPORTS SECTION --------------------
 import argparse
 import base64
 import gc
@@ -49,8 +25,7 @@ else:
 try:
     import bs4
 except ImportError:
-    print("BeautifulSoup is not installed !\nPlease run 'sudo pip install"
-          " beautifulsoup4' before continuing.")
+    print("BeautifulSoup is not installed !\nPlease run 'sudo pip install beautifulsoup4' before continuing.")
     sys.exit(1)
 # colorize logging
 try:
@@ -64,10 +39,30 @@ try:
     from requests.packages.urllib3.exceptions import InsecureRequestWarning
     requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 except AttributeError:
-    print("Failed to disable warnings for requests !\nPlease run 'sudo pip "
-          "install --upgrade requests' to fix it.")
+    print("Failed to disable warnings for requests !\nPlease run 'sudo pip install --upgrade requests' to fix it.")
     sys.exit(1)
 logging.getLogger("requests").setLevel(logging.CRITICAL)
+
+
+__author__    = "Alexandre D'Hondt"
+__email__     = "alexandre.dhondt@gmail.com"
+__copyright__ = ("A. D'Hondt", 2017)
+__version__   = "1.14"
+__license__   = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law."""
+__repository__ = "https://github.com/dhondta/webgrep"
+__doc__        = """Search for PATTERN in each input URL and its related resources (images, scripts and style sheets).
+By default,
+ - resources are NOT downloaded
+ - response HTTP headers are NOT included in grepping ; use '--include-headers'
+ - PATTERN is a basic regular expression (BRE) ; use '-E' for extended (ERE)
+Important note: webgrep does not handle recursion (in other words, it does not spider additional web pages).
+Examples:
+  webgrep example http://www.example.com     # will only grep on HTML code
+  webgrep -r example http://www.example.com  # will only grep on LOCAL images, ...
+  webgrep -R example http://www.example.com  # will only grep on ALL images, ...
+"""
 
 
 # -------------------- CONSTANTS SECTION --------------------
@@ -76,8 +71,8 @@ DATE_FORMAT = '%H:%M:%S'
 DEVNULL = open(os.devnull, 'w')
 DATA_NAME = '{}-{:>03}.{}'
 LOG_FORMAT = '%(asctime)s [%(levelname)s] %(message)s'
-PROXIES = getproxies() or {k.split('_')[0].lower(): os.environ[k] for k in \
-    ['HTTP_PROXY', 'HTTPS_PROXY', 'FTP_PROXY'] if k in os.environ.keys()}
+PROXIES = getproxies() or {k.split('_')[0].lower(): os.environ[k] for k in ['HTTP_PROXY', 'HTTPS_PROXY', 'FTP_PROXY'] \
+                           if k in os.environ.keys()}
 TEMP_DIR = '/tmp/webgrep'
 CACHE_FILE = "cache.json"
 
@@ -85,8 +80,7 @@ CACHE_FILE = "cache.json"
 # -------------------- HANDLERS SECTION ---------------------
 # Categories:
 # - preprocessors: applied on downloaded resources ; these REPLACE the resource
-# - tools: applied after resource download and processing ; these DERIVE new
-#          resources
+# - tools: applied after resource download and processing ; these DERIVE new resources
 # Naming convention:
 #   [resource type]_[preprocessors|tools]
 #   e.g. STYLE_TOOLS, IMAGE_PREPROCESSORS
@@ -98,13 +92,10 @@ CACHE_FILE = "cache.json"
 b = lambda c: (bytes(c, 'utf-8') if not isinstance(c, bytes) else c) if P3 \
               else (c.encode('utf-8') if isinstance(c, unicode) else c)
 s = lambda c: (c.decode("utf-8") if isinstance(c, bytes) else c) if P3 else c
-get_cmd = lambda t: lambda r: Popen([t, r.rel_fn], stdout=PIPE,
-                              stderr=DEVNULL, cwd=args.tmp).communicate()[0]
+get_cmd = lambda t: lambda r: Popen([t, r.rel_fn], stdout=PIPE, stderr=DEVNULL, cwd=args.tmp).communicate()[0]
 
 def css_unminifier(res, indent=2, maxlen=256):
-    """
-    Minimalistic CSS unminifying function.
-    """
+    """ Minimalistic CSS unminifying function. """
     if res.type != "style":
         return
     # CSS is considered minified if any line is longer than a given length
@@ -118,17 +109,13 @@ def css_unminifier(res, indent=2, maxlen=256):
 
 
 def inline_items(tag, rtype=None, attrs=None):
-    """
-    Decorator for extracting inline items from a Web page.
-    """
+    """ Decorator for extracting inline items from a Web page. """
     if not rtype:
         rtype = tag
     if not attrs:
         attrs = {}
     def _inline_items(page):
-        """
-        Inline item extraction function.
-        """
+        """ Inline item extraction function. """
         for item in page.soup.find_all(tag, **attrs):
             inline = "data:inline/{};none,...".format(rtype)
             with Resource(inline, page) as res:
@@ -146,10 +133,7 @@ def inline_items(tag, rtype=None, attrs=None):
 
 
 def steghide(res):
-    """
-    Steghide handler for applying steganography on images (only trying an empty
-     passphrase).
-    """
+    """ Steghide handler for applying steganography on images (only trying an empty passphrase). """
     if res.type != "image":
         return
     tmp_file = "/tmp/steghide-extracted-text"
@@ -166,16 +150,13 @@ def steghide(res):
 
 
 def tesseract(res):
-    """
-    Tesseract handler for applying OCR on images.
-    """
+    """ Tesseract handler for applying OCR on images. """
     if res.type != "image":
         return
     output = []
     for i in range(3,11):
         cmd = ['tesseract', res.rel_fn, 'stdout', '-psm', str(i)]
-        result = Popen(cmd, stdout=PIPE, stderr=DEVNULL, cwd=args.tmp) \
-                     .communicate()[0].strip()
+        result = Popen(cmd, stdout=PIPE, stderr=DEVNULL, cwd=args.tmp).communicate()[0].strip()
         if len(result) > 0:
             for line in result.split(b('\n')):
                 if line not in output:
@@ -185,29 +166,22 @@ def tesseract(res):
 
 RESOURCE_TYPES = ['page', 'image', 'script', 'style']
 IMAGE_TOOLS = {
-    "exiftool": ('binary', get_cmd("exiftool"),
-                 "Binary required for getting image EXIF info ;\n"
-                 " consider running 'sudo apt-get install exiftool'"),
-    "strings": ('binary', get_cmd("strings"),
-                "Binary required for getting strings from downloaded files ;"
-                "\n consider running 'sudo apt-get install strings'"),
-    "steghide": ('binary', steghide,
-                 "Binary required for applying steganography on images ;"
-                 "\n consider running 'sudo apt-get install steghide'"),
-    "tesseract": ('binary', tesseract,
-                  "Binary required for trying OCR on images ;"
-                  "\n consider running 'sudo apt-get install tesseract-ocr'"),
+    "exiftool": ('binary', get_cmd("exiftool"), "Binary required for getting image EXIF info ;\n consider running "
+                 "'sudo apt-get install exiftool'"),
+    "strings": ('binary', get_cmd("strings"), "Binary required for getting strings from downloaded files ;\n consider "
+                "running 'sudo apt-get install strings'"),
+    "steghide": ('binary', steghide, "Binary required for applying steganography on images ;\n consider running "
+                 "'sudo apt-get install steghide'"),
+    "tesseract": ('binary', tesseract, "Binary required for trying OCR on images ;\n consider running "
+                  "'sudo apt-get install tesseract-ocr'"),
 }
 PAGE_PREPROCESSORS = {
-    "inline-script": ('function', inline_items("script", attrs={'src': False}),
-                      None),
-    "inline-style": ('function', inline_items("style"), None),
+    "inline-script": ('function', inline_items("script", attrs={'src': False}), None),
+    "inline-style":  ('function', inline_items("style"), None),
 }
 SCRIPT_PREPROCESSORS = {
-    "jsbeautifier": ('module',
-                     lambda r: b(jsbeautifier.beautify(s(r.content))),
-                     "Python library required for deobfuscating Javascript ;"
-                     "\n consider running 'sudo pip install jsbeautifier'"),
+    "jsbeautifier": ('module', lambda r: b(jsbeautifier.beautify(s(r.content))), "Python library required for "
+                     "deobfuscating Javascript ;\n consider running 'sudo pip install jsbeautifier'"),
 }
 STYLE_PREPROCESSORS = {
     "unminifier": ('function', css_unminifier, None),
@@ -216,8 +190,7 @@ STYLE_PREPROCESSORS = {
 
 # -------------------- FUNCTIONS SECTION --------------------
 def __exit_handler(signal=None, frame=None, code=0):
-    """
-    Exit handler.
+    """ Exit handler.
 
     :param signal: signal number
     :param stack: stack frame
@@ -241,9 +214,8 @@ signal.signal(signal.SIGINT, __exit_handler)
 
 
 def __installed(item, itype, message=None):
-    """
-    Item existence check ; display message if the item is not installed and 
-     return boolean so that it can be determined if the item can be used.
+    """ Item existence check ; display message if the item is not installed and return boolean so that it can be
+         determined if the item can be used.
 
     :param item: item to be checked
     :param itype: item type (binary | module | function)
@@ -275,10 +247,7 @@ def __installed(item, itype, message=None):
 
 # --------------------- CLASSES SECTION ---------------------
 class ArgCollectOption(argparse.Action):
-    """
-    Argparse action for handling keyword arguments collection in grep_opts
-     so that these can be passed to grep.
-    """
+    """ Argparse action for handling keyword arguments collection in grep_opts so that these can be passed to grep. """
     def __call__(self, parser, args, values, option_string=None):
         if not hasattr(args, "grep_opts") or args.grep_opts is None:
             args.grep_opts = []
@@ -293,9 +262,7 @@ class ArgCollectOption(argparse.Action):
 
 
 class ArgVersion(argparse.Action):
-    """
-    Display version by calling -V/--version.
-    """
+    """ Display version by calling -V/--version. """
     def __call__(self, parser, args, values, option_string=None):
         print("webgrep {}".format(__version__))
         print(__copyright__)
@@ -304,9 +271,7 @@ class ArgVersion(argparse.Action):
 
 
 class GetHeader(argparse.Action):
-    """
-    Collect HTTP headers.
-    """
+    """ Collect HTTP headers. """
     def __call__(self, parser, args, values, option_string=None):
         if not hasattr(args, "headers") or args.headers is None:
             args.headers = {}
@@ -316,9 +281,7 @@ class GetHeader(argparse.Action):
 
 
 class ProxySetting(argparse.Action):
-    """
-    Manually set proxy setting.
-    """
+    """ Manually set proxy setting. """
     def __call__(self, parser, args, values, option_string=None):
         if values is not None:
             PROXIES[self.dest] = values
@@ -326,10 +289,7 @@ class ProxySetting(argparse.Action):
 
 
 class Resource(object):
-    """
-    Class for downloading web page and its related resources and for grepping
-     each downloaded data.
-    """
+    """ Class for downloading web page and its related resources and for grepping each downloaded data. """
     grep_exclude = ["image"]
     headers = {'User-Agent': "Mozilla/5.0 (X11; Ubuntu; Linux x86_64;"
                              " rv:50.0) Gecko/20100101 Firefox/50.0",
@@ -352,8 +312,7 @@ class Resource(object):
         self._error = False
         self._raw_data = 0
         self._main = parent is None or parsed.scheme == "data"
-        self._same_origin = parent is None or self.base == parent.base or \
-                            parsed.scheme == 'data'  # occurs for embedded image
+        self._same_origin = parent is None or self.base == parent.base or parsed.scheme == 'data'  # i.e. embedded image
         # check if the resource is an embedded data
         if parsed.scheme == "data":
             self._download = False
@@ -405,27 +364,19 @@ class Resource(object):
         gc.collect()
 
     def _allowed(self):
-        """
-        Handle only same-origin or also external resources.
-        """
-        return self._main or args.inc_all or \
-               (args.inc_local and self._same_origin)
+        """ Handle only same-origin or also external resources. """
+        return self._main or args.inc_all or (args.inc_local and self._same_origin)
 
     def _cache(self):
-        """
-        Resource caching for use with '--keep-files'.
-        """
+        """ Resource caching for use with '--keep-files'. """
         if args.cache is not None and self.rel_fn not in args.cache.keys():
             logger.debug("> Registering '{}' to cache".format(self.rel_fn))
             args.cache[self.rel_fn] = self.type
 
     def _load(self):
-        """
-        Resource loading for use with '--keep-files', allowing to re-grep on
-         different keywords without re-downloading everything.
-        """
-        if exists(self.abs_fn) and args.cache is not None and \
-            self.rel_fn in args.cache.keys():
+        """ Resource loading for use with '--keep-files', allowing to re-grep on different keywords without
+         re-downloading everything. """
+        if exists(self.abs_fn) and args.cache is not None and self.rel_fn in args.cache.keys():
             with open(self.abs_fn, 'rb') as f:
                 self.content = f.read()
             self.type = args.cache[self.rel_fn]
@@ -453,8 +404,7 @@ class Resource(object):
         elif "text/css" in ct:
             self.type = "style"
         elif "application/javascript" in ct or \
-            (any(c in ["application/octet-stream", "text/plain", "text/html"] \
-             for c in ct) and ext == ".js"):
+            (any(c in ["application/octet-stream", "text/plain", "text/html"] for c in ct) and ext == ".js"):
             self.type = "script"
         elif "text/html" in ct:
             self.type = "page"
@@ -463,28 +413,22 @@ class Resource(object):
         logger.debug("> Resource type set to '{}'".format(self.type))
 
     def download(self):
-        """
-        Download the resource then save it to a temporary folder. Afterwards,
-         trigger grep and particular handling.
+        """ Download the resource then save it to a temporary folder. Afterwards, trigger grep and particular handling.
         """
         if not self._download or not self._allowed():
             return self
         logger.debug("> Downloading {}".format(self.url))
         self.headers.update(args.headers)
-        req = requests.Request('GET', self.url, headers=self.headers) \
-                      .prepare()
+        req = requests.Request('GET', self.url, headers=self.headers).prepare()
         try:
-            resp = session.send(req, proxies=PROXIES if args.proxy else {},
-                                verify=False, stream=True)
+            resp = session.send(req, proxies=PROXIES if args.proxy else {}, verify=False, stream=True)
         except requests.exceptions.ProxyError as e:
             if bool(PROXIES):
                 # try next requests disabling the proxy
                 logger.debug("Disabling proxy settings")
                 globals()['PROXIES'] = {}
-                resp = session.send(req, proxies=PROXIES if args.proxy \
-                                    else {}, verify=False, stream=True)        
-            else:
-                # proxy already disabled, just throw the exception
+                resp = session.send(req, proxies=PROXIES if args.proxy else {}, verify=False, stream=True)        
+            else: # proxy already disabled, just throw the exception
                 raise e
         # attach HTTP headers if they are to be grepped
         if args.inc_headers:
@@ -505,8 +449,7 @@ class Resource(object):
                 self.content = ''
             # other types of resources are handled with preprocessors
             else:
-                self.content = resp.text.encode(resp.encoding) if \
-                    resp.encoding is not None else resp.text
+                self.content = resp.text.encode(resp.encoding) if resp.encoding is not None else resp.text
                 if self.type == "page":
                     self.soup = bs4.BeautifulSoup(self.content, 'html.parser')
                 self.preprocess()
@@ -521,9 +464,7 @@ class Resource(object):
         return self
 
     def grep(self):
-        """
-        Call built-in grep command on the downloaded resource then remove it.
-        """
+        """ Call built-in grep command on the downloaded resource then remove it. """
         if not self._allowed() or self._error or self.type in self.grep_exclude:
             return self
         logger.debug("> Grepping {}".format(self.abs_fn))
@@ -537,24 +478,19 @@ class Resource(object):
         cmd = ' '.join(tokens)
         # then execute it
         logger.debug(">> Command: {}".format(cmd))
-        out = Popen(cmd, stdout=PIPE, stderr=STDOUT, cwd=args.tmp, shell=True) \
-              .communicate()[0]
-        # NB: despite the fact that shell=True is not recommended, it is
-        #  used as, otherwise, the command is not properly handled
-        #  regarding patterns with quotes
+        out = Popen(cmd, stdout=PIPE, stderr=STDOUT, cwd=args.tmp, shell=True).communicate()[0]
+        # NB: despite the fact that shell=True is not recommended, it is used as, otherwise, the command is not properly
+        #      handled regarding patterns with quotes
         if len(out) > 0:
             print(out.decode('utf-8'))
         return self
 
     def handle(self):
-        """
-        Handle the downloaded resource according to its type.
-        - web page: search for images (also handle raw images), scripts and
-                    style sheets
-        - images: apply multiple tools then only grep on these results
-        - scripts: try to deobfuscate then also grep on these results
-        - style sheets: search for image references then download them for 
-                        normal image handling
+        """ Handle the downloaded resource according to its type.
+        - web page:     search for images (also handle raw images), scripts and style sheets
+        - images:       apply multiple tools then only grep on these results
+        - scripts:      try to deobfuscate then also grep on these results
+        - style sheets: search for image references then download them for normal image handling
         """
         if not self._allowed() or self._error:
             return self
@@ -562,15 +498,13 @@ class Resource(object):
         if args.inc_headers:
             with Resource("data:other/headers;none,...", self) as res:
                 if not hasattr(res, "content"):  # not in cache
-                    # 'resp_headers' does not exist when --keep-files was used
-                    #  as the resource is not downloaded again
+                    # 'resp_headers' does not exist when --keep-files was used as the resource is not downloaded again
                     if hasattr(self, "resp_headers"):  # download performed
                         with open(res.abs_fn, 'wb') as f:
-                            f.write(b('\n'.join(": ".join(item) for item in \
-                                      self.resp_headers.items())))
+                            f.write(b('\n'.join(": ".join(item) for item in self.resp_headers.items())))
                 res.grep()
-        # then, derive new resources by applying available tools as defined in
-        #  the global constants (see HANDLERS SECTION above)
+        # then, derive new resources by applying available tools as defined in the global constants (see HANDLERS
+        #  SECTION above)
         attr = "{}_tools".format(self.type)
         if hasattr(args, attr):
             # create a new resource for each time a tool is executed
@@ -613,9 +547,7 @@ class Resource(object):
                     res.grep().handle()
 
     def preprocess(self):
-        """
-        Preprocess the resource according to its type.
-        """
+        """ Preprocess the resource according to its type. """
         attr = '{}_preprocessors'.format(self.type)
         if hasattr(args, attr):
             for tool, handler in getattr(args, attr):
@@ -625,25 +557,16 @@ class Resource(object):
 
     @staticmethod
     def pprint_req(request):
-        """
-        Pretty print method for debugging HTTP communication.
-        """
-        data = "\n\n    {}\n".format(request.body) \
-                if request.method == "POST" else "\n"
-        logger.debug("Sent request:\n    {} {}\n{}".format( \
-            request.method, request.url,
-            '\n'.join('    {}: {}'.format(k, v) \
-                for k, v in sorted(request.headers.items()))) + data)
+        """ Pretty print method for debugging HTTP communication. """
+        data = "\n\n    {}\n".format(request.body) if request.method == "POST" else "\n"
+        logger.debug("Sent request:\n    {} {}\n{}".format(request.method, request.url,
+                     '\n'.join('    {}: {}'.format(k, v) for k, v in sorted(request.headers.items()))) + data)
 
     @staticmethod
     def pprint_resp(response):
-        """
-        Pretty print method for debugging HTTP communication.
-        """
-        logger.debug("Received response:\n    {} {}\n{}\n"
-            .format(response.status_code, response.reason,
-            '\n'.join('    {}: {}'.format(k, v) \
-                for k, v in sorted(response.headers.items()))))
+        """ Pretty print method for debugging HTTP communication. """
+        logger.debug("Received response:\n    {} {}\n{}\n".format(response.status_code, response.reason,
+                     '\n'.join('    {}: {}'.format(k, v) for k, v in sorted(response.headers.items()))))
 
 
 # ----------------------- MAIN SECTION ----------------------
@@ -653,150 +576,104 @@ if __name__ == '__main__':
         prog=__file__.lstrip('./'), description=__doc__, add_help=False,
         usage="%s [OPTION]... PATTERN [URL]..." % basename(__file__),
         epilog="Please report bugs on GitHub: {}".format(__repository__),
-        formatter_class=argparse.RawTextHelpFormatter)
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
     # argument groups are willingly the same as in grep
     regex = parser.add_argument_group("Regexp selection and interpretation")
     regex_pat = regex.add_mutually_exclusive_group()
-    regex_pat.add_argument("-e", "--regexp", action=ArgCollectOption,
-                           help="use PATTERN for matching")
-    regex_pat.add_argument("-f", "--file", action=ArgCollectOption,
-                           help="obtain PATTERN from FILE")
+    regex_pat.add_argument("-e", "--regexp", action=ArgCollectOption, help="use PATTERN for matching")
+    regex_pat.add_argument("-f", "--file", action=ArgCollectOption, help="obtain PATTERN from FILE")
     regex_type = regex.add_mutually_exclusive_group()
-    regex_type.add_argument("-E", "--extended-regexp", dest="grep_opts",
-                            const="-E", action="append_const", help="PATTERN "
-                            "is an extended regular expression (ERE)")
-    regex_type.add_argument("-F", "--fixed-strings", dest="grep_opts",
-                            const="-F", action="append_const", help="PATTERN "
-                            "is a set of newline-separated fixed strings")
-    regex_type.add_argument("-G", "--basic-regexp", dest="grep_opts",
-                            const="-G", action="append_const",
+    regex_type.add_argument("-E", "--extended-regexp", dest="grep_opts", const="-E", action="append_const",
+                            help="PATTERN is an extended regular expression (ERE)")
+    regex_type.add_argument("-F", "--fixed-strings", dest="grep_opts", const="-F", action="append_const",
+                            help="PATTERN is a set of newline-separated fixed strings")
+    regex_type.add_argument("-G", "--basic-regexp", dest="grep_opts", const="-G", action="append_const",
                             help="PATTERN is a basic regular expression (BRE)")
-    regex_type.add_argument("-P", "--perl-regexp", dest="grep_opts",
-                            const="-P", action="append_const",
+    regex_type.add_argument("-P", "--perl-regexp", dest="grep_opts", const="-P", action="append_const",
                             help="PATTERN is a Perl regular expression")
-    regex.add_argument("-i", "--ignore-case", dest="grep_opts",
-                       const="-i", action="append_const",
+    regex.add_argument("-i", "--ignore-case", dest="grep_opts", const="-i", action="append_const",
                        help="ignore case distinctions")
-    regex.add_argument("-w", "--word-regexp", dest="grep_opts",
-                       const="-w", action="append_const",
+    regex.add_argument("-w", "--word-regexp", dest="grep_opts", const="-w", action="append_const",
                        help="force PATTERN to match only whole words")
-    regex.add_argument("-x", "--line-regexp", dest="grep_opts",
-                       const="-x", action="append_const",
+    regex.add_argument("-x", "--line-regexp", dest="grep_opts", const="-x", action="append_const",
                        help="force PATTERN to match only whole lines")
-    regex.add_argument("-z", "--null-data", dest="grep_opts",
-                       const="-z", action="append_const",
+    regex.add_argument("-z", "--null-data", dest="grep_opts", const="-z", action="append_const",
                        help="a data line ends in 0 byte, not newline")
     misc = parser.add_argument_group("Miscellaneous")
-    misc.add_argument("-s", "--no-messages", dest="grep_opts",
-                      const="-s", action="append_const",
+    misc.add_argument("-s", "--no-messages", dest="grep_opts", const="-s", action="append_const",
                       help="suppress error messages")
-    misc.add_argument("-v", "--invert-match", dest="grep_opts",
-                      const="-v", action="append_const",
+    misc.add_argument("-v", "--invert-match", dest="grep_opts", const="-v", action="append_const",
                       help="select non-matching lines")
-    misc.add_argument("-V", "--version", nargs=0, action=ArgVersion,
-                      help="print version information and exit")
-    misc.add_argument("--help", action="help",
-                      help="display this help and exit")
+    misc.add_argument("-V", "--version", nargs=0, action=ArgVersion, help="print version information and exit")
+    misc.add_argument("--help", action="help", help="display this help and exit")
     # ----- START new arguments -----
     misc.add_argument("--verbose", action="store_true", help="verbose mode")
     misc.add_argument("--keep-files", dest="keep", action="store_true",
                       help="keep temporary files in the temporary directory")
     misc.add_argument("--temp-dir", dest="tmp", default=TEMP_DIR,
-                      help="define the temporary directory (default: {})"
-                           .format(TEMP_DIR))
+                      help="define the temporary directory (default: {})".format(TEMP_DIR))
     # ----- END new arguments -----
     output = parser.add_argument_group("Output control")
-    output.add_argument("-m", "--max-count", dest="m", metavar="NUM", type=int,
-                        action=ArgCollectOption,
+    output.add_argument("-m", "--max-count", dest="m", metavar="NUM", type=int, action=ArgCollectOption,
                         help="stop after NUM matches")
-    output.add_argument("-b", "--byte-offset", dest="grep_opts",
-                        const="-b", action="append_const",
+    output.add_argument("-b", "--byte-offset", dest="grep_opts", const="-b", action="append_const",
                         help="print the byte offset with output lines")
-    output.add_argument("-n", "--line-number", dest="grep_opts",
-                        const="-n", action="append_const",
+    output.add_argument("-n", "--line-number", dest="grep_opts", const="-n", action="append_const",
                         help="print line number with output lines")
-    output.add_argument("--line-buffered", dest="grep_opts",
-                        const="--line-buffered", action="append_const",
+    output.add_argument("--line-buffered", dest="grep_opts", const="--line-buffered", action="append_const",
                         help="flush output on every line")
-    output.add_argument("-H", "--with-filename", dest="grep_opts",
-                        const="-H", action="append_const",
+    output.add_argument("-H", "--with-filename", dest="grep_opts", const="-H", action="append_const",
                         help="print the file name for each match")
-    output.add_argument("-h", "--no-filename", dest="grep_opts",
-                        const="-h", action="append_const",
+    output.add_argument("-h", "--no-filename", dest="grep_opts", const="-h", action="append_const",
                         help="suppress the file name prefix on output")
-    output.add_argument("--label", dest="label", metavar="LABEL", type=str,
-                        action=ArgCollectOption,
+    output.add_argument("--label", dest="label", metavar="LABEL", type=str, action=ArgCollectOption,
                         help="use LABEL as the standard input filename prefix")
-    output.add_argument("-o", "--only-matching", dest="grep_opts",
-                        const="-o", action="append_const",
+    output.add_argument("-o", "--only-matching", dest="grep_opts", const="-o", action="append_const",
                         help="show only the part of a line matching PATTERN")
-    output.add_argument("-q", "--quiet", "--silent", dest="grep_opts",
-                        const="-q", action="append_const",
+    output.add_argument("-q", "--quiet", "--silent", dest="grep_opts", const="-q", action="append_const",
                         help="suppress all normal output")
     output_type = output.add_mutually_exclusive_group()
-    output_type.add_argument("--binary-files", dest="binary_files",
-                             metavar="TYPE", choices=['binary', 'text',
-                             'without-match'], default=None,
-                             action=ArgCollectOption,
-                             help="assume that binary files are TYPE;\nTYPE "
-                                  "is 'binary', 'text', or 'without-match'")
-    output_type.add_argument("-a", "--text", dest="grep_opts",
-                             const="-a", action="append_const",
+    output_type.add_argument("--binary-files", dest="binary_files", metavar="TYPE", choices=['binary', 'text',
+                             'without-match'], default=None, action=ArgCollectOption,
+                             help="assume that binary files are TYPE;\nTYPE is 'binary', 'text', or 'without-match'")
+    output_type.add_argument("-a", "--text", dest="grep_opts", const="-a", action="append_const",
                              help="equivalent to --binary-files=text")
-    output_type.add_argument("-I", dest="grep_opts",
-                             const="-I", action="append_const",
+    output_type.add_argument("-I", dest="grep_opts", const="-I", action="append_const",
                              help="equivalent to --binary-files=without-match")
     output_match = output.add_mutually_exclusive_group()
-    output_match.add_argument("-L", "--files-without-match", dest="grep_opts",
-                              const="-L", action="append_const", help="print "
-                              "only names of FILEs containing no match")
-    output_match.add_argument("-l", "--files-with-match", dest="grep_opts",
-                              const="-l", action="append_const", help="print "
-                              "only names of FILEs containing matches")
-    output.add_argument("-c", "--count", dest="grep_opts",
-                        const="-c", action="append_const",
+    output_match.add_argument("-L", "--files-without-match", dest="grep_opts", const="-L", action="append_const",
+                              help="print only names of FILEs containing no match")
+    output_match.add_argument("-l", "--files-with-match", dest="grep_opts", const="-l", action="append_const",
+                              help="print only names of FILEs containing matches")
+    output.add_argument("-c", "--count", dest="grep_opts", const="-c", action="append_const",
                         help="print only a count of matching lines per FILE")
-    output.add_argument("-T", "--initial-tab", dest="grep_opts",
-                        const="-T", action="append_const",
+    output.add_argument("-T", "--initial-tab", dest="grep_opts", const="-T", action="append_const",
                         help="make tabs line up (if needed)")
-    output.add_argument("-Z", "--null", dest="grep_opts",
-                        const="-Z", action="append_const",
+    output.add_argument("-Z", "--null", dest="grep_opts", const="-Z", action="append_const",
                         help="print 0 byte after FILE name")
     context = parser.add_argument_group("Context control")
-    context.add_argument("-B", "--before-context", dest="B", metavar="NUM",
-                         type=int, action=ArgCollectOption,
+    context.add_argument("-B", "--before-context", dest="B", metavar="NUM", type=int, action=ArgCollectOption,
                          help="print NUM lines of leading context")
-    context.add_argument("-A", "--after-context", dest="A", metavar="NUM",
-                         type=int, action=ArgCollectOption,
+    context.add_argument("-A", "--after-context", dest="A", metavar="NUM", type=int, action=ArgCollectOption,
                          help="print NUM lines of trailing context")
-    context.add_argument("-C", "--context", dest="C", metavar="NUM", type=int,
-                         action=ArgCollectOption,
+    context.add_argument("-C", "--context", dest="C", metavar="NUM", type=int, action=ArgCollectOption,
                          help="print NUM lines of output context")
-    regex_pat.add_argument("pattern", metavar="PATTERN", nargs='?',
-                           default=None, help=argparse.SUPPRESS)
+    regex_pat.add_argument("pattern", metavar="PATTERN", nargs='?', default=None, help=argparse.SUPPRESS)
     parser.add_argument("url", metavar="URL", nargs='+', help=argparse.SUPPRESS)
     # ----- START new arguments -----
     web = parser.add_argument_group("Web options")
-    web.add_argument("-r", "--local-resources", dest="inc_local",
-                     action="store_true",
+    web.add_argument("-r", "--local-resources", dest="inc_local", action="store_true",
                      help="also grep local resources (same-origin)")
-    web.add_argument("-R", "--all-resources", dest="inc_all",
-                     action="store_true",
+    web.add_argument("-R", "--all-resources", dest="inc_all", action="store_true",
                      help="also grep all resources (even non-same-origin)")
-    web.add_argument("--include-headers", dest="inc_headers",
-                     action="store_true", help="also grep HTTP headers")
-    web.add_argument("--cookie", action=GetHeader,
-                     help="use a session cookie in the HTTP headers")
-    web.add_argument("--referer", action=GetHeader,
-                     help="provide the referer in the HTTP headers")
-    web = parser.add_argument_group("Proxy settings (by default, system proxy "
-                                    "settings are used)")
-    web.add_argument("-d", "--disable-proxy", dest="proxy",
-                     action="store_false", help="manually disable proxy")
-    web.add_argument("--http-proxy", dest="http", action=ProxySetting,
-                     help="manually set the HTTP proxy")
-    web.add_argument("--https-proxy", dest="https", action=ProxySetting,
-                     help="manually set the HTTPS proxy")
+    web.add_argument("--include-headers", dest="inc_headers", action="store_true", help="also grep HTTP headers")
+    web.add_argument("--cookie", action=GetHeader, help="use a session cookie in the HTTP headers")
+    web.add_argument("--referer", action=GetHeader, help="provide the referer in the HTTP headers")
+    web = parser.add_argument_group("Proxy settings (by default, system proxy settings are used)")
+    web.add_argument("-d", "--disable-proxy", dest="proxy", action="store_false", help="manually disable proxy")
+    web.add_argument("--http-proxy", dest="http", action=ProxySetting, help="manually set the HTTP proxy")
+    web.add_argument("--https-proxy", dest="https", action=ProxySetting, help="manually set the HTTPS proxy")
     # ----- END new arguments -----
     args = parser.parse_args()
     args.cache = None
@@ -812,8 +689,8 @@ if __name__ == '__main__':
                 args.cache = json.load(f)
         except Exception:
             args.cache = {}
-    if args.pattern is None and (args.grep_opts is None or \
-        "--file" not in args.grep_opts and "--regexp" not in args.grep_opts):
+    if args.pattern is None and (args.grep_opts is None or "--file" not in args.grep_opts and \
+       "--regexp" not in args.grep_opts):
         parser.error("no pattern provided")
     if args.pattern is not None:
         args.pattern = "\"{}\"".format(args.pattern)
@@ -824,8 +701,7 @@ if __name__ == '__main__':
         args.headers = {}
     # configure logging and get the root logger
     args.verbose = [logging.INFO, logging.DEBUG][args.verbose]
-    logging.basicConfig(format=LOG_FORMAT, datefmt=DATE_FORMAT,
-                        level=args.verbose)
+    logging.basicConfig(format=LOG_FORMAT, datefmt=DATE_FORMAT, level=args.verbose)
     logger = logging.getLogger()
     if colored_logs_present:
         coloredlogs.DEFAULT_LOG_FORMAT = LOG_FORMAT
@@ -834,24 +710,21 @@ if __name__ == '__main__':
     # attach tools and preprocessors to args
     for item in ['tools', 'preprocessors']:
         for res in RESOURCE_TYPES:
-            attr = '{}_{}'.format(res, item).upper()
-            if attr in globals():
-                setattr(args, attr.lower(), [(k, v[1]) for k, v in \
-                        globals()[attr].items() if __installed(k, v[0], v[2])])
+            a = '{}_{}'.format(res, item).upper()
+            if a in globals():
+                setattr(args, a.lower(), [(k, v[1]) for k, v in globals()[a].items() if __installed(k, v[0], v[2])])
     # running the main stuff
     try:
         session = requests.Session()
         logger.debug("Creating temporary folder {}".format(args.tmp))
-        logger.debug("Cache {}".format(["enabled", "disabled"] \
-                                       [args.cache is None]))
+        logger.debug("Cache {}".format(["enabled", "disabled"][args.cache is None]))
         if not exists(args.tmp):
              os.makedirs(args.tmp)
         done = []
         for url in args.url:
             if url in done:
                 continue
-            logger.debug("Downloading page {} and its associated resources"
-                         .format(url))
+            logger.debug("Downloading page {} and its associated resources".format(url))
             with Resource(url) as page:
                 page.grep().handle()
             done.append(url)
