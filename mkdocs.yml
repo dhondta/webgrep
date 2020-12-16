@@ -13,3 +13,5 @@ use_directory_urls: false
 markdown_extensions:
   - admonition
   - codehilite
+  - toc:
+      permalink: true

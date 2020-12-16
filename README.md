@@ -19,7 +19,7 @@
 
 ## Introduction
 
-This self-contained tool relies on the well-known `grep` tool for grepping Web pages. It binds nearly every option of the original tool and also provides additional features like deobfuscating Javascript or appyling OCR on images before grepping downloaded resources.
+This self-contained tool relies on the well-known [`grep`](https://linux.die.net/man/1/grep) tool for grepping Web pages. It binds nearly every option of the original tool and also provides additional features like deobfuscating Javascript or appyling OCR on images before grepping downloaded resources.
 
 
 ## System Requirements
