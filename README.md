@@ -31,13 +31,13 @@ Its Python logic mostly uses standard built-in modules but also some particular 
 
 ## Installation
 
- ```session
- $ sudo pip install webgrep-tool
- ```
+```session
+$ sudo pip install webgrep-tool
+```
 
- > **Behind a proxy ?**
- > 
- > Do not forget to add option `--proxy=http://[user]:[pwd]@[host]:[port]` to your pip command.
+> **Behind a proxy ?**
+> 
+> Do not forget to add option `--proxy=http://[user]:[pwd]@[host]:[port]` to your pip command.
 
 
 ## Quick Start
