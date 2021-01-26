@@ -26,7 +26,7 @@ This self-contained tool relies on the well-known [`grep`](https://linux.die.net
 
 This script was tested on an Ubuntu 16.04 with Python 2.7 and Python 3.5.
 
-Its Python logic mostly uses standard built-in modules but also some particular tool- or preprocessor-related modules. It makes calls to `grep`.
+Its Python logic mostly uses standard built-in modules but also some particular tool- or preprocessor-related modules. It makes calls to [`grep`](https://linux.die.net/man/1/grep).
 
 
 ## Installation
