@@ -1,7 +1,7 @@
 remote_theme: "dhondta/dhondta.github.io"
 
 # General options
-title: Home
+title-fa: true
 #title-img: /assets/img/logo.png
 description: Open source projects
 url: "https://projects.praxisec.be"
@@ -128,6 +128,7 @@ link-tags: true
 exclude:
   - CNAME
   - LICENSE
+  - Gemfile
   - README.md
 
 plugins:
