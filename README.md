@@ -6,17 +6,6 @@
 [![License](https://img.shields.io/pypi/l/webgrep-tool.svg)](https://pypi.python.org/pypi/webgrep-tool/)
 
 
-## Table of Contents
-
-   * [Introduction](#introduction)
-   * [System Requirements](#system-requirements)
-   * [Installation](#installation)
-   * [Quick Start](#quick-start)
-   * [Design Principles](#design-principles)
-   * [Resource *Handlers*](#resource-handlers)
-   * [Issues management](#issues-management)
-
-
 ## Introduction
 
 This self-contained tool relies on the well-known [`grep`](https://linux.die.net/man/1/grep) tool for grepping Web pages. It binds nearly every option of the original tool and also provides additional features like deobfuscating Javascript or appyling OCR on images before grepping downloaded resources.
