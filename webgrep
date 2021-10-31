@@ -16,10 +16,10 @@ from subprocess import call, Popen, PIPE, STDOUT
 P3 = sys.version_info >= (3,0)
 # Python2/3 specific imports
 if P3:
-    from urllib.request import getproxies
+    from urllib.request import getproxies, url2pathname
     from urllib.parse import unquote, urlparse, urljoin
 else:
-    from urllib import getproxies, unquote
+    from urllib import getproxies, unquote, url2pathname
     from urlparse import urljoin, urlparse
 # BeautifulSoup
 try:
@@ -47,7 +47,7 @@ logging.getLogger("requests").setLevel(logging.CRITICAL)
 __author__    = "Alexandre D'Hondt"
 __email__     = "alexandre.dhondt@gmail.com"
 __copyright__ = ("A. D'Hondt", 2017)
-__version__   = "1.14"
+__version__   = "1.15"
 __license__   = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law."""
@@ -122,7 +122,7 @@ def inline_items(tag, rtype=None, attrs=None):
                 res.type = rtype
                 if not hasattr(res, "content"):  # not in cache
                     logger.debug("> Extracting {}".format(res.abs_fn))
-                    res.content = item.text
+                    res.content = item.text or item.html or item.string
                     res.preprocess()
                     with open(res.abs_fn, 'wb') as f:
                         f.write(b(res.content))
@@ -228,7 +228,7 @@ def __installed(item, itype, message=None):
             return True
         except OSError:
             if message is not None:
-                logger.warn(message)
+                logger.warning(message)
             return False
     elif itype == 'module':
         try:
@@ -236,13 +236,13 @@ def __installed(item, itype, message=None):
             return True
         except ImportError:
             if message is not None:
-                logger.warn(message)
+                logger.warning(message)
             return False
     elif itype == 'function':
         # no check required ; this relates to a locally declared function
         return True
     else:
-        logger.warn("Unknown item type ({})".format(itype))
+        logger.warning("Unknown item type ({})".format(itype))
 
 
 # --------------------- CLASSES SECTION ---------------------
@@ -278,6 +278,43 @@ class GetHeader(argparse.Action):
         if values is not None:
             args.headers[self.dest.capitalize()] = values
         delattr(args, self.dest)
+
+
+#based on: https://stackoverflow.com/questions/10123929/fetch-a-file-from-a-local-url-with-python-requests
+class LocalFileAdapter(requests.adapters.BaseAdapter):
+    """ Protocol Adapter to allow Requests to GET file:// URL's. """
+    @staticmethod
+    def _check_path(method, path):
+        """Return an HTTP status for the given filesystem path."""
+        if method.lower() in ["delete", "option", "put", "trace"]:
+            return 501, "Not Implemented"
+        elif method.lower() not in ["get", "head"]:
+            return 405, "Method Not Allowed"
+        elif os.path.isdir(path):
+            return 400, "Path Not A File"
+        elif not os.path.isfile(path):
+            return 404, "File Not Found"
+        elif not os.access(path, os.R_OK):
+            return 403, "Access Denied"
+        return 200, "OK"
+
+    def send(self, request, **kwargs):
+        """ Return the file specified by the given request. """
+        path, resp = os.path.normcase(os.path.normpath(url2pathname(request.path_url))), requests.Response()
+        resp.status_code, resp.reason = self._check_path(request.method, path)
+        if resp.status_code == 200 and request.method.lower() != "head":
+            try:
+                resp.raw = open(path, 'rb')
+            except (OSError, IOError) as err:
+                resp.status_code = 500
+                resp.reason = str(err)
+        resp.url = request.url.decode('utf-8') if isinstance(request.url, bytes) else request.url
+        resp.request = request
+        resp.connection = self
+        return resp
+
+    def close(self):
+        pass
 
 
 class ProxySetting(argparse.Action):
@@ -333,7 +370,7 @@ class Resource(object):
                 if enc.strip() not in ["none", "base64"]:
                     raise Exception("Bad image encoding")
             except Exception as e:
-                logger.warn("{} (from {})".format(str(e), self.parent.rel_fn))
+                logger.warning("{} (from {})".format(str(e), self.parent.rel_fn))
                 self._error = True
                 return
             fn = DATA_NAME.format(self.type, self.parent._raw_data, ext)
@@ -371,6 +408,8 @@ class Resource(object):
         """ Resource caching for use with '--keep-files'. """
         if args.cache is not None and self.rel_fn not in args.cache.keys():
             logger.debug("> Registering '{}' to cache".format(self.rel_fn))
+            if not hasattr(self, "type"):
+                self._update_type()
             args.cache[self.rel_fn] = self.type
 
     def _load(self):
@@ -521,6 +560,8 @@ class Resource(object):
         if self.type == "page":
             if not args.inc_local and not args.inc_all:
                 return
+            if not hasattr(self, "soup"):
+                self.soup = bs4.BeautifulSoup(self.content, 'html.parser')
             # download images
             for img in self.soup.find_all("img", src=True):
                 url = urljoin(self.path, img['src'])
@@ -575,7 +616,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         prog=__file__.lstrip('./'), description=__doc__, add_help=False,
         usage="%s [OPTION]... PATTERN [URL]..." % basename(__file__),
-        epilog="Please report bugs on GitHub: {}".format(__repository__),
+        epilog="Please report bugs on GitHub: {}/issues/new".format(__repository__),
         formatter_class=argparse.RawTextHelpFormatter,
     )
     # argument groups are willingly the same as in grep
@@ -716,6 +757,7 @@ if __name__ == '__main__':
     # running the main stuff
     try:
         session = requests.Session()
+        session.mount('file://', LocalFileAdapter())
         logger.debug("Creating temporary folder {}".format(args.tmp))
         logger.debug("Cache {}".format(["enabled", "disabled"][args.cache is None]))
         if not exists(args.tmp):
