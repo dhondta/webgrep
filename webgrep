@@ -47,7 +47,7 @@ logging.getLogger("requests").setLevel(logging.CRITICAL)
 __author__    = "Alexandre D'Hondt"
 __email__     = "alexandre.dhondt@gmail.com"
 __copyright__ = ("A. D'Hondt", 2017)
-__version__   = "1.15"
+__version__   = "1.16"
 __license__   = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law."""
@@ -201,8 +201,7 @@ def __exit_handler(signal=None, frame=None, code=0):
             if args.cache:
                 logger.debug("Saving cache at {}".format(args.cache_file))
                 with open(args.cache_file, 'w') as f:
-                    json.dump(args.cache, f)
-            args.cache
+                    json.dump(args.cache, f, indent=2)
             logger.info("Temporary files are available at {}".format(args.tmp))
         else:
             logger.debug("Removing temporary folder {}".format(args.tmp))
@@ -338,11 +337,11 @@ class Resource(object):
                'DNT': "1",
                'Upgrade-Insecure-Requests': "1"}
 
-    def __init__(self, url, parent=None):
-        self.url = url
+    def __init__(self, rurl, parent=None):
+        self.url = rurl
         self.parent = parent
-        self.path = dirname(url) + "/"
-        parsed = urlparse(url)
+        self.path = dirname(rurl) + "/"
+        parsed = urlparse(rurl)
         self.base = "{}://{}".format(parsed.scheme, parsed.netloc)
         self.netloc = parsed.netloc
         self._download = True
@@ -406,28 +405,28 @@ class Resource(object):
 
     def _cache(self):
         """ Resource caching for use with '--keep-files'. """
-        if args.cache is not None and self.rel_fn not in args.cache.keys():
+        if args.cache is not None and self.rel_fn not in args.cache[url].keys():
             logger.debug("> Registering '{}' to cache".format(self.rel_fn))
             if not hasattr(self, "type"):
                 self._update_type()
-            args.cache[self.rel_fn] = self.type
+            if self.type != "undefined":
+                args.cache.setdefault(url, {})
+                args.cache[url][self.rel_fn] = self.type
 
     def _load(self):
         """ Resource loading for use with '--keep-files', allowing to re-grep on different keywords without
          re-downloading everything. """
-        if exists(self.abs_fn) and args.cache is not None and self.rel_fn in args.cache.keys():
+        if exists(self.abs_fn) and args.cache is not None and self.rel_fn in args.cache[url].keys():
             with open(self.abs_fn, 'rb') as f:
                 self.content = f.read()
-            self.type = args.cache[self.rel_fn]
+            self.type = args.cache[url][self.rel_fn]
             logger.debug("> Loading '{}' from cache".format(self.rel_fn))
             return self
         else:
             return self.download()
 
     def _update_type(self):
-        """
-        Update resource type based on HTTP response content type.
-        """
+        """ Update resource type based on HTTP response content type. """
         if self._error:
             self.type = "failure"
             return
@@ -504,7 +503,7 @@ class Resource(object):
 
     def grep(self):
         """ Call built-in grep command on the downloaded resource then remove it. """
-        if not self._allowed() or self._error or self.type in self.grep_exclude:
+        if not self._allowed() or self._error or self.type in self.grep_exclude: # or not hasattr(self, "type")
             return self
         logger.debug("> Grepping {}".format(self.abs_fn))
         # make the command from input arguments
@@ -564,27 +563,23 @@ class Resource(object):
                 self.soup = bs4.BeautifulSoup(self.content, 'html.parser')
             # download images
             for img in self.soup.find_all("img", src=True):
-                url = urljoin(self.path, img['src'])
-                with Resource(url, self) as res:
+                with Resource(urljoin(self.path, img['src']), self) as res:
                     res.grep().handle()
             # download scripts
             for script in self.soup.find_all("script", src=True):
-                url = urljoin(self.path, script.attrs['src'])
-                with Resource(url, self) as res:
+                with Resource(urljoin(self.path, script.attrs['src']), self) as res:
                     res.grep().handle()
             # download styles
             for link in self.soup.find_all("link", href=True, rel="stylesheet"):
-                url = urljoin(self.path, link.attrs['href'])
-                with Resource(url, self) as res:
+                with Resource(urljoin(self.path, link.attrs['href']), self) as res:
                     res.grep().handle()
         elif self.type == "style":
             # search for image URLs in the style sheet
-            for url in CSS_URL_REGEX.findall(self.content):
-                url = url.strip(b("\'\"")).decode()
-                if url.startswith("#"):  # exclude anchor tags
+            for u in CSS_URL_REGEX.findall(self.content):
+                u = u.strip(b("\'\"")).decode()
+                if u.startswith("#"):  # exclude anchor tags
                     continue
-                url = urljoin(self.path, url)
-                with Resource(url, self) as res:
+                with Resource(urljoin(self.path, u), self) as res:
                     res.grep().handle()
 
     def preprocess(self):
@@ -612,7 +607,7 @@ class Resource(object):
 
 # ----------------------- MAIN SECTION ----------------------
 if __name__ == '__main__':
-    global logger, session, args
+    global logger, session, args, url
     parser = argparse.ArgumentParser(
         prog=__file__.lstrip('./'), description=__doc__, add_help=False,
         usage="%s [OPTION]... PATTERN [URL]..." % basename(__file__),
@@ -754,15 +749,25 @@ if __name__ == '__main__':
             a = '{}_{}'.format(res, item).upper()
             if a in globals():
                 setattr(args, a.lower(), [(k, v[1]) for k, v in globals()[a].items() if __installed(k, v[0], v[2])])
-    # running the main stuff
+    # running the main stuff ;
+    done = []
+    #  if a cache exists and --keep-files is used, use it
+    if args.cache:
+        for url in args.url:
+            if url in done:
+                continue
+            for rel_fn in args.cache.get(url).keys():
+                with Resource(rel_fn) as res:
+                    res.grep()
+        __exit_handler()
+    #  otherwise, download the page and its resources
     try:
         session = requests.Session()
-        session.mount('file://', LocalFileAdapter())
+        session.mount("file://", LocalFileAdapter())
         logger.debug("Creating temporary folder {}".format(args.tmp))
         logger.debug("Cache {}".format(["enabled", "disabled"][args.cache is None]))
         if not exists(args.tmp):
              os.makedirs(args.tmp)
-        done = []
         for url in args.url:
             if url in done:
                 continue
