@@ -1,3 +1,6 @@
+<h1 align="center">WebGrep <a href="https://twitter.com/intent/tweet?text=WebGrep%20-%20Grep%20Web%20pages%20and%20their%20resources%20using%20JS%20deobfuscation,%20CSS%20unminifying%20and%20image%20OCR.%0D%0Ahttps%3a%2f%2fgithub%2ecom%2fdhondta%2fwebgrep%0D%0A&hashtags=python,grep,webpage,ocr,tesseract,cssunminifier,jsdeobfuscation,jsbeautifier,ctftools"><img src="https://img.shields.io/badge/Tweet--lightgrey?logo=twitter&style=social" alt="Tweet" height="20"/></a></h1>
+<h3 align="center">Grep Web pages and their resources.</h3>
+
 [![PyPi](https://img.shields.io/pypi/v/webgrep-tool.svg)](https://pypi.python.org/pypi/webgrep-tool/)
 ![Platform](https://img.shields.io/badge/platform-linux-yellow.svg)
 [![Read The Docs](https://readthedocs.org/projects/webgrep/badge/?version=latest)](http://webgrep.readthedocs.io/en/latest/?badge=latest)
@@ -6,30 +9,13 @@
 [![License](https://img.shields.io/pypi/l/webgrep-tool.svg)](https://pypi.python.org/pypi/webgrep-tool/)
 
 
-## Introduction
-
 This self-contained tool relies on the well-known [`grep`](https://linux.die.net/man/1/grep) tool for grepping Web pages. It binds nearly every option of the original tool and also provides additional features like deobfuscating Javascript or appyling OCR on images before grepping downloaded resources.
 
-
-## System Requirements
-
-This script was tested on an Ubuntu 16.04 with Python 2.7 and Python 3.5.
-
-Its Python logic mostly uses standard built-in modules but also some particular tool- or preprocessor-related modules. It makes calls to [`grep`](https://linux.die.net/man/1/grep).
-
-
-## Installation
-
 ```session
-$ sudo pip install webgrep-tool
+$ pip install webgrep-tool
 ```
 
-> **Behind a proxy ?**
-> 
-> Do not forget to add option `--proxy=http://[user]:[pwd]@[host]:[port]` to your pip command.
-
-
-## Quick Start
+## :fast_forward:  Quick Start
 
 1. Help
 
@@ -131,16 +117,7 @@ Please report bugs on GitHub: https://github.com/dhondta/webgrep
  ```
 
 
-## Design principles:
-
-- Maximum use of Python-builtin modules.
-- For non-standard imports ;
-  - trigger exit if not installed and display the command for installing these
-  - do not trigger exit if not installed, display the command for installing these and continue execution without the related functionality
-- No modularity (principle of self-contained tool) so that it can simply be copied in `/usr/bin` with dependencies other than the non-standard imports.
-
-
-## Resource *Handlers*
+## :pushpin: Resource *Handlers*
 
 **Definitions**:
 - *Resource* (what is being processed):  Web page, images, Javascript, CSS
@@ -160,8 +137,10 @@ The handlers are defined in the `# --...-- HANDLERS SECTION --...--` of the code
 Note: images found in the CSS files are also processed.
 
 
-## Issues management
+## :clap:  Supporters
 
-Please [open an Issue](https://github.com/dhondta/webgrep/issues/new) if you want to contribute or submit suggestions. 
+[![Stargazers repo roster for @dhondta/webgrep](https://reporoster.com/stars/dark/dhondta/webgrep)](https://github.com/dhondta/webgrep/stargazers)
 
-If you want to build and submit new handlers, please open a Pull Request.
+[![Forkers repo roster for @dhondta/webgrep](https://reporoster.com/forks/dark/dhondta/webgrep)](https://github.com/dhondta/webgrep/network/members)
+
+<p align="center"><a href="#"><img src="https://img.shields.io/badge/Back%20to%20top--lightgrey?style=social" alt="Back to top" height="20"/></a></p>
