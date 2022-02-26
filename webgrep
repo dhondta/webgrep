@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 import argparse
 import base64
@@ -11,6 +11,7 @@ import requests
 import shutil
 import signal
 import sys
+from datetime import date
 from os.path import basename, dirname, exists, join, splitext
 from subprocess import call, Popen, PIPE, STDOUT
 P3 = sys.version_info >= (3,0)
@@ -46,8 +47,8 @@ logging.getLogger("requests").setLevel(logging.CRITICAL)
 
 __author__    = "Alexandre D'Hondt"
 __email__     = "alexandre.dhondt@gmail.com"
-__copyright__ = ("A. D'Hondt", 2017)
-__version__   = "1.17"
+__copyright__ = "© 2017-%d A. D'Hondt" % date.today().year
+__version__   = "1.18"
 __license__   = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law."""
