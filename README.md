@@ -1,4 +1,4 @@
-<p align="center"><img src="https://github.com/dhondta/webgrep/raw/master/doc/imgs/logo.png"></p>
+<p align="center"><img src="https://github.com/dhondta/webgrep/raw/main/doc/imgs/logo.png"></p>
 <h1 align="center">WebGrep <a href="https://twitter.com/intent/tweet?text=WebGrep%20-%20Grep%20Web%20pages%20and%20their%20resources%20using%20JS%20deobfuscation,%20CSS%20unminifying%20and%20image%20OCR.%0D%0Ahttps%3a%2f%2fgithub%2ecom%2fdhondta%2fwebgrep%0D%0A&hashtags=python,grep,webpage,ocr,tesseract,cssunminifier,jsdeobfuscation,jsbeautifier,ctftools"><img src="https://img.shields.io/badge/Tweet--lightgrey?logo=twitter&style=social" alt="Tweet" height="20"/></a></h1>
 <h3 align="center">Grep Web pages and their resources.</h3>
 
@@ -6,7 +6,6 @@
 ![Platform](https://img.shields.io/badge/platform-linux-yellow.svg)
 [![Read The Docs](https://readthedocs.org/projects/webgrep/badge/?version=latest)](http://webgrep.readthedocs.io/en/latest/?badge=latest)
 [![Known Vulnerabilities](https://snyk.io/test/github/dhondta/webgrep/badge.svg?targetFile=requirements.txt)](https://snyk.io/test/github/dhondta/webgrep?targetFile=requirements.txt)
-[![Requirements Status](https://requires.io/github/dhondta/webgrep/requirements.svg?branch=master)](https://requires.io/github/dhondta/webgrep/requirements/?branch=master)
 [![License](https://img.shields.io/pypi/l/webgrep-tool.svg)](https://pypi.python.org/pypi/webgrep-tool/)
 
 

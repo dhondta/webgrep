@@ -48,7 +48,7 @@ logging.getLogger("requests").setLevel(logging.CRITICAL)
 __author__    = "Alexandre D'Hondt"
 __email__     = "alexandre.dhondt@gmail.com"
 __copyright__ = "© 2017-%d A. D'Hondt" % date.today().year
-__version__   = "1.18"
+__version__   = "1.19"
 __license__   = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law."""
@@ -750,7 +750,7 @@ if __name__ == '__main__':
             a = '{}_{}'.format(res, item).upper()
             if a in globals():
                 setattr(args, a.lower(), [(k, v[1]) for k, v in globals()[a].items() \
-                                          if __installed(k, v[0], None if args.no_messages else v[2])])
+                                          if __installed(k, v[0], None if "-s" in (args.grep_opts or []) else v[2])])
     # running the main stuff ;
     done = []
     #  if a cache exists and --keep-files is used, use it

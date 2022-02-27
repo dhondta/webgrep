@@ -12,7 +12,7 @@ setup(
   author = "Alexandre D\'Hondt",
   author_email = "alexandre.dhondt@gmail.com",
   url = "https://github.com/dhondta/webgrep",
-  version = "1.18",
+  version = "1.19",
   license = "GPLv3",
   description = "Grep for a Web page with extra features like JS deobfuscation and OCR",
   long_description=long_descr,
