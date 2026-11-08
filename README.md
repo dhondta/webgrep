@@ -1,11 +1,13 @@
-<p align="center"><img src="https://github.com/dhondta/webgrep/raw/main/doc/imgs/logo.png"></p>
+<p align="center"><img src="https://github.com/dhondta/webgrep/raw/main/docs/pages/img/logo.png"></p>
 <h1 align="center">WebGrep <a href="https://twitter.com/intent/tweet?text=WebGrep%20-%20Grep%20Web%20pages%20and%20their%20resources%20using%20JS%20deobfuscation,%20CSS%20unminifying%20and%20image%20OCR.%0D%0Ahttps%3a%2f%2fgithub%2ecom%2fdhondta%2fwebgrep%0D%0A&hashtags=python,grep,webpage,ocr,tesseract,cssunminifier,jsdeobfuscation,jsbeautifier,ctftools"><img src="https://img.shields.io/badge/Tweet--lightgrey?logo=twitter&style=social" alt="Tweet" height="20"/></a></h1>
 <h3 align="center">Grep Web pages and their resources.</h3>
 
 [![PyPi](https://img.shields.io/pypi/v/webgrep-tool.svg)](https://pypi.python.org/pypi/webgrep-tool/)
-![Platform](https://img.shields.io/badge/platform-linux-yellow.svg)
-[![Read The Docs](https://readthedocs.org/projects/webgrep/badge/?version=latest)](http://webgrep.readthedocs.io/en/latest/?badge=latest)
-[![Known Vulnerabilities](https://snyk.io/test/github/dhondta/webgrep/badge.svg?targetFile=requirements.txt)](https://snyk.io/test/github/dhondta/webgrep?targetFile=requirements.txt)
+[![Python Versions](https://img.shields.io/pypi/pyversions/webgrep-tool.svg)](https://pypi.python.org/pypi/webgrep-tool/)
+[![Read The Docs](https://readthedocs.org/projects/webgrep/badge/?version=latest)](https://webgrep.readthedocs.io/en/latest/?badge=latest)
+[![Build Status](https://github.com/dhondta/webgrep/actions/workflows/python-package.yml/badge.svg)](https://github.com/dhondta/webgrep/actions/workflows/python-package.yml)
+[![Security](https://github.com/dhondta/webgrep/actions/workflows/security.yml/badge.svg)](https://github.com/dhondta/webgrep/actions/workflows/security.yml)
+[![Coverage Status](https://raw.githubusercontent.com/dhondta/webgrep/coverage-badge/docs/coverage.svg)](https://github.com/dhondta/webgrep/actions/workflows/python-package.yml)
 [![License](https://img.shields.io/pypi/l/webgrep-tool.svg)](https://pypi.python.org/pypi/webgrep-tool/)
 
 
@@ -23,14 +25,12 @@ $ pip install webgrep-tool
  $ webgrep --help
 usage: webgrep [OPTION]... PATTERN [URL]...
 
-Search for PATTERN in each input URL and its related resources
- (images, scripts and style sheets).
+Search for PATTERN in each input URL and its related resources (images, scripts and style sheets).
 By default,
  - resources are NOT downloaded
  - response HTTP headers are NOT included in grepping ; use '--include-headers'
  - PATTERN is a basic regular expression (BRE) ; use '-E' for extended (ERE)
-Important note: webgrep does not handle recursion (in other words, it does not
-                spider additional web pages).
+Important note: webgrep does not handle recursion (in other words, it does not spider additional web pages).
 Examples:
   webgrep example http://www.example.com     # will only grep on HTML code
   webgrep -r example http://www.example.com  # will only grep on LOCAL images, ...
@@ -104,14 +104,14 @@ Proxy settings (by default, system proxy settings are used):
   --http-proxy HTTP     manually set the HTTP proxy
   --https-proxy HTTPS   manually set the HTTPS proxy
 
-Please report bugs on GitHub: https://github.com/dhondta/webgrep
+Please report bugs on GitHub: https://github.com/dhondta/webgrep/issues/new
 
  ```
  
 2. Example
 
  ```session
- $ ./webgrep -R Welcome https://github.com
+ $ webgrep -R Welcome https://github.com
        Welcome home, <br>developers
  
  ```
@@ -123,7 +123,7 @@ Please report bugs on GitHub: https://github.com/dhondta/webgrep
 - *Resource* (what is being processed):  Web page, images, Javascript, CSS
 - *Handler* (how a resource is processed): CSS unminifying, OCR, deobfuscation, EXIF data retrieval, ...
 
-The handlers are defined in the `# --...-- HANDLERS SECTION --...--` of the code. Currently available handlers :
+The handlers are defined in the `HANDLERS SECTION` of [`src/webgrep/__main__.py`](https://github.com/dhondta/webgrep/blob/main/src/webgrep/__main__.py) (see [Extending WebGrep](https://webgrep.readthedocs.io/en/latest/extending.html)). Currently available handlers :
 1. Images
   - EXIF: using `exiftool`
   - Steganography: using `steghide` (with a blank password)
@@ -136,11 +136,5 @@ The handlers are defined in the `# --...-- HANDLERS SECTION --...--` of the code
 
 Note: images found in the CSS files are also processed.
 
-
-## :clap:  Supporters
-
-[![Stargazers repo roster for @dhondta/webgrep](https://reporoster.com/stars/dark/dhondta/webgrep)](https://github.com/dhondta/webgrep/stargazers)
-
-[![Forkers repo roster for @dhondta/webgrep](https://reporoster.com/forks/dark/dhondta/webgrep)](https://github.com/dhondta/webgrep/network/members)
 
 <p align="center"><a href="#"><img src="https://img.shields.io/badge/Back%20to%20top--lightgrey?style=social" alt="Back to top" height="20"/></a></p>

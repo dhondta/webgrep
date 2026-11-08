@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=70.0", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[tool.coverage.run]
+source = ["webgrep"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+  'pragma: no cover',
+  'if.*?__name__.*?==.*?.__main__.:',
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "webgrep.__info__.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.txt"]
+
+[project]
+name = "webgrep-tool"
+authors = [
+  {name="Alexandre D'Hondt", email="alexandre.dhondt@gmail.com"},
+]
+description = "Grep for a Web page with extra features like JS deobfuscation and OCR"
+license = {file = "LICENSE"}
+keywords = ["grep", "webpage", "js-deobfuscator", "css-unminifier", "exif-metadata", "ocr", "steghide", "ctf-tools"]
+requires-python = ">=3.10,<4"
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "Intended Audience :: Information Technology",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+  "bs4",
+  "coloredlogs",
+  "jsbeautifier",
+  "requests>=2.32.2",
+]
+dynamic = ["version"]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+documentation = "https://webgrep.readthedocs.io/en/latest/?badge=latest"
+homepage = "https://github.com/dhondta/webgrep"
+issues = "https://github.com/dhondta/webgrep/issues"
+repository = "https://github.com/dhondta/webgrep"
+
+[project.scripts]
+webgrep = "webgrep.__main__:main"

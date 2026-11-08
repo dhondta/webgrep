@@ -1,8 +1,10 @@
-#!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 import argparse
 import base64
+import bs4
+import coloredlogs
 import gc
+import jsbeautifier
 import json
 import logging
 import os
@@ -11,49 +13,21 @@ import requests
 import shutil
 import signal
 import sys
-from datetime import date
+import urllib3
 from os.path import basename, dirname, exists, join, splitext
 from subprocess import call, Popen, PIPE, STDOUT
-P3 = sys.version_info >= (3,0)
-# Python2/3 specific imports
-if P3:
-    from urllib.request import getproxies, url2pathname
-    from urllib.parse import unquote, urlparse, urljoin
-else:
-    from urllib import getproxies, unquote, url2pathname
-    from urlparse import urljoin, urlparse
-# BeautifulSoup
-try:
-    import bs4
-except ImportError:
-    print("BeautifulSoup is not installed !\nPlease run 'sudo pip install beautifulsoup4' before continuing.")
-    sys.exit(1)
-# colorize logging
-try:
-    import coloredlogs
-    colored_logs_present = True
-except ImportError:
-    print("(Install 'coloredlogs' for colored logging)")
-    colored_logs_present = False
+from urllib.parse import unquote, urlparse, urljoin
+from urllib.request import getproxies, url2pathname
+
+from .__info__ import __author__, __copyright__, __repository__, __version__
+
 # disable annoying requests warnings
-try:
-    from requests.packages.urllib3.exceptions import InsecureRequestWarning
-    requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-except AttributeError:
-    print("Failed to disable warnings for requests !\nPlease run 'sudo pip install --upgrade requests' to fix it.")
-    sys.exit(1)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logging.getLogger("requests").setLevel(logging.CRITICAL)
+logger = logging.getLogger()
 
 
-__author__    = "Alexandre D'Hondt"
-__email__     = "alexandre.dhondt@gmail.com"
-__copyright__ = "© 2017-%d A. D'Hondt" % date.today().year
-__version__   = "1.19"
-__license__   = """License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
-This is free software: you are free to change and redistribute it.
-There is NO WARRANTY, to the extent permitted by law."""
-__repository__ = "https://github.com/dhondta/webgrep"
-__doc__        = """Search for PATTERN in each input URL and its related resources (images, scripts and style sheets).
+__doc__ = """Search for PATTERN in each input URL and its related resources (images, scripts and style sheets).
 By default,
  - resources are NOT downloaded
  - response HTTP headers are NOT included in grepping ; use '--include-headers'
@@ -67,7 +41,7 @@ Examples:
 
 
 # -------------------- CONSTANTS SECTION --------------------
-CSS_URL_REGEX = re.compile(b'url\(([^)]+)\)' if P3 else r'url\(([^)]+)\)')
+CSS_URL_REGEX = re.compile(rb'url\(([^)]+)\)')
 DATE_FORMAT = '%H:%M:%S'
 DEVNULL = open(os.devnull, 'w')
 DATA_NAME = '{}-{:>03}.{}'
@@ -90,9 +64,8 @@ CACHE_FILE = "cache.json"
 # - value: tuple of the form (type, handler, message if not exists)
 #    NB: the handler always takes a Resource object in argument
 # Handlers are automatically set as attributes in 'args'
-b = lambda c: (bytes(c, 'utf-8') if not isinstance(c, bytes) else c) if P3 \
-              else (c.encode('utf-8') if isinstance(c, unicode) else c)
-s = lambda c: (c.decode("utf-8") if isinstance(c, bytes) else c) if P3 else c
+b = lambda c: c if isinstance(c, bytes) else bytes(c, 'utf-8')
+s = lambda c: c.decode("utf-8") if isinstance(c, bytes) else c
 get_cmd = lambda t: lambda r: Popen([t, r.rel_fn], stdout=PIPE, stderr=DEVNULL, cwd=args.tmp).communicate()[0]
 
 def css_unminifier(res, indent=2, maxlen=256):
@@ -102,10 +75,10 @@ def css_unminifier(res, indent=2, maxlen=256):
     # CSS is considered minified if any line is longer than a given length
     res.content, i = b(res.content), indent
     if any([len(l) > maxlen for l in res.content.split(b('\n'))]):
-        res.content = re.sub(b("\*\/"), b("*/\r\n"), res.content)
-        res.content = re.sub(b("\{"), b(" {\r\n") + b(" ") * i, res.content)
-        res.content = re.sub(b(";"), b(";\r\n") + b(" ") * i, res.content)
-        res.content = re.sub(b("\}"), b(";\r\n}\r\n"), res.content)
+        res.content = re.sub(rb"\*/", b"*/\r\n", res.content)
+        res.content = re.sub(rb"\{", b" {\r\n" + b" " * i, res.content)
+        res.content = re.sub(rb";", b";\r\n" + b" " * i, res.content)
+        res.content = re.sub(rb"\}", b";\r\n}\r\n", res.content)
     return res.content
 
 
@@ -137,9 +110,9 @@ def steghide(res):
     """ Steghide handler for applying steganography on images (only trying an empty passphrase). """
     if res.type != "image":
         return
-    tmp_file = "/tmp/steghide-extracted-text"
-    cmd = 'steghide extract -sf {} -p "" -f -xf {}'.format(res.abs_fn, tmp_file)
-    p = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+    tmp_file = join(args.tmp, "steghide-extracted-text")
+    cmd = ['steghide', 'extract', '-sf', res.abs_fn, '-p', "", '-f', '-xf', tmp_file]
+    p = Popen(cmd, stdout=PIPE, stderr=PIPE)
     _, output = p.communicate()
     if b(tmp_file) in output:
         with open(tmp_file, 'rb') as f:
@@ -156,7 +129,7 @@ def tesseract(res):
         return
     output = []
     for i in range(3,11):
-        cmd = ['tesseract', res.rel_fn, 'stdout', '-psm', str(i)]
+        cmd = ['tesseract', res.rel_fn, 'stdout', '--psm', str(i)]
         result = Popen(cmd, stdout=PIPE, stderr=DEVNULL, cwd=args.tmp).communicate()[0].strip()
         if len(result) > 0:
             for line in result.split(b('\n')):
@@ -168,9 +141,9 @@ def tesseract(res):
 RESOURCE_TYPES = ['page', 'image', 'script', 'style']
 IMAGE_TOOLS = {
     "exiftool": ('binary', get_cmd("exiftool"), "Binary required for getting image EXIF info ;\n consider running "
-                 "'sudo apt-get install exiftool'"),
+                 "'sudo apt-get install libimage-exiftool-perl'"),
     "strings": ('binary', get_cmd("strings"), "Binary required for getting strings from downloaded files ;\n consider "
-                "running 'sudo apt-get install strings'"),
+                "running 'sudo apt-get install binutils'"),
     "steghide": ('binary', steghide, "Binary required for applying steganography on images ;\n consider running "
                  "'sudo apt-get install steghide'"),
     "tesseract": ('binary', tesseract, "Binary required for trying OCR on images ;\n consider running "
@@ -182,7 +155,7 @@ PAGE_PREPROCESSORS = {
 }
 SCRIPT_PREPROCESSORS = {
     "jsbeautifier": ('module', lambda r: b(jsbeautifier.beautify(s(r.content))), "Python library required for "
-                     "deobfuscating Javascript ;\n consider running 'sudo pip install jsbeautifier'"),
+                     "deobfuscating Javascript ;\n consider running 'pip install jsbeautifier'"),
 }
 STYLE_PREPROCESSORS = {
     "unminifier": ('function', css_unminifier, None),
@@ -206,11 +179,9 @@ def __exit_handler(signal=None, frame=None, code=0):
             logger.info("Temporary files are available at {}".format(args.tmp))
         else:
             logger.debug("Removing temporary folder {}".format(args.tmp))
-            shutil.rmtree(args.tmp)
+            shutil.rmtree(args.tmp, ignore_errors=True)
     logging.shutdown()
     sys.exit(code)
-# bind termination signal (Ctrl+C) to exit handler
-signal.signal(signal.SIGINT, __exit_handler)
 
 
 def __installed(item, itype, message=None):
@@ -406,7 +377,7 @@ class Resource(object):
 
     def _cache(self):
         """ Resource caching for use with '--keep-files'. """
-        if args.cache is not None and self.rel_fn not in args.cache[url].keys():
+        if args.cache is not None and self.rel_fn not in args.cache.get(url, {}):
             logger.debug("> Registering '{}' to cache".format(self.rel_fn))
             if not hasattr(self, "type"):
                 self._update_type()
@@ -417,7 +388,7 @@ class Resource(object):
     def _load(self):
         """ Resource loading for use with '--keep-files', allowing to re-grep on different keywords without
          re-downloading everything. """
-        if exists(self.abs_fn) and args.cache is not None and self.rel_fn in args.cache[url].keys():
+        if exists(self.abs_fn) and args.cache is not None and self.rel_fn in args.cache.get(url, {}):
             with open(self.abs_fn, 'rb') as f:
                 self.content = f.read()
             self.type = args.cache[url][self.rel_fn]
@@ -442,7 +413,7 @@ class Resource(object):
             self.type = "image"
         elif "text/css" in ct:
             self.type = "style"
-        elif "application/javascript" in ct or \
+        elif "application/javascript" in ct or "text/javascript" in ct or \
             (any(c in ["application/octet-stream", "text/plain", "text/html"] for c in ct) and ext == ".js"):
             self.type = "script"
         elif "text/html" in ct:
@@ -466,7 +437,7 @@ class Resource(object):
                 # try next requests disabling the proxy
                 logger.debug("Disabling proxy settings")
                 globals()['PROXIES'] = {}
-                resp = session.send(req, proxies=PROXIES if args.proxy else {}, verify=False, stream=True)        
+                resp = session.send(req, proxies=PROXIES if args.proxy else {}, verify=False, stream=True)
             else: # proxy already disabled, just throw the exception
                 raise e
         # attach HTTP headers if they are to be grepped
@@ -514,12 +485,9 @@ class Resource(object):
         if hasattr(args, "pattern") and args.pattern is not None:
             tokens.append(args.pattern)
         tokens.append(self.rel_fn)
-        cmd = ' '.join(tokens)
-        # then execute it
-        logger.debug(">> Command: {}".format(cmd))
-        out = Popen(cmd, stdout=PIPE, stderr=STDOUT, cwd=args.tmp, shell=True).communicate()[0]
-        # NB: despite the fact that shell=True is not recommended, it is used as, otherwise, the command is not properly
-        #      handled regarding patterns with quotes
+        # then execute it ; no shell, as the file name is derived from a URL that a Web page controls
+        logger.debug(">> Command: {}".format(tokens))
+        out = Popen(tokens, stdout=PIPE, stderr=STDOUT, cwd=args.tmp).communicate()[0]
         if len(out) > 0:
             print(out.decode('utf-8'))
         return self
@@ -607,11 +575,13 @@ class Resource(object):
 
 
 # ----------------------- MAIN SECTION ----------------------
-if __name__ == '__main__':
+def main():
     global logger, session, args, url
+    # bind termination signal (Ctrl+C) to exit handler
+    signal.signal(signal.SIGINT, __exit_handler)
     parser = argparse.ArgumentParser(
-        prog=__file__.lstrip('./'), description=__doc__, add_help=False,
-        usage="%s [OPTION]... PATTERN [URL]..." % basename(__file__),
+        prog="webgrep", description=__doc__, add_help=False,
+        usage="%(prog)s [OPTION]... PATTERN [URL]...",
         epilog="Please report bugs on GitHub: {}/issues/new".format(__repository__),
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -716,7 +686,7 @@ if __name__ == '__main__':
     args.cache = None
     if not args.keep:
         try:
-            shutil.rmtree(args.tmp)
+            shutil.rmtree(args.tmp, ignore_errors=True)
         except OSError:
             pass
     else:
@@ -729,21 +699,15 @@ if __name__ == '__main__':
     if args.pattern is None and (args.grep_opts is None or "--file" not in args.grep_opts and \
        "--regexp" not in args.grep_opts):
         parser.error("no pattern provided")
-    if args.pattern is not None:
-        args.pattern = "\"{}\"".format(args.pattern)
-    elif "--regexp" in args.grep_opts:
-        i = args.grep_opts.index("--regexp")
-        args.grep_opts[i+1] = "\"{}\"".format(args.grep_opts[i+1])
     if not hasattr(args, "headers"):
         args.headers = {}
     # configure logging and get the root logger
     args.verbose = [logging.INFO, logging.DEBUG][args.verbose]
     logging.basicConfig(format=LOG_FORMAT, datefmt=DATE_FORMAT, level=args.verbose)
     logger = logging.getLogger()
-    if colored_logs_present:
-        coloredlogs.DEFAULT_LOG_FORMAT = LOG_FORMAT
-        coloredlogs.DEFAULT_DATE_FORMAT = DATE_FORMAT
-        coloredlogs.install(args.verbose)
+    coloredlogs.DEFAULT_LOG_FORMAT = LOG_FORMAT
+    coloredlogs.DEFAULT_DATE_FORMAT = DATE_FORMAT
+    coloredlogs.install(args.verbose)
     # attach tools and preprocessors to args
     for item in ['tools', 'preprocessors']:
         for res in RESOURCE_TYPES:
@@ -769,7 +733,7 @@ if __name__ == '__main__':
         logger.debug("Creating temporary folder {}".format(args.tmp))
         logger.debug("Cache {}".format(["enabled", "disabled"][args.cache is None]))
         if not exists(args.tmp):
-             os.makedirs(args.tmp)
+            os.makedirs(args.tmp)
         for url in args.url:
             if url in done:
                 continue
@@ -783,3 +747,6 @@ if __name__ == '__main__':
     # gracefully close after running the main stuff
     __exit_handler()
 
+
+if __name__ == '__main__':
+    main()
